@@ -21,6 +21,8 @@ class knn_cl():
         self.latent_dim = 50
         self.item_size = 7
         self.time_sequence = 4
+        self.train_data = read_d.train_data
+        self.test_data = read_d.test_data
         """
         define LSTM variables
         """

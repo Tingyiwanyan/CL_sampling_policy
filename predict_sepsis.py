@@ -14,8 +14,8 @@ class read_data():
     def __init__(self):
         self.file_path = '/home/tingyi/adver_cl/training/'
         self.file_names = listdir(self.file_path)
-        self.train_data_size = 6000
-        self.test_data_size = 500
+        self.train_prop = 0.7
+        self.test_prop = 0.3
         self.sepsis_group = []
         self.non_sepsis_group = []
         self.total_data = []
@@ -68,6 +68,14 @@ class read_data():
             std = np.std(self.dic_item[j])
             self.median_vital_single[j] = median
             self.std_vital_single[j] =std
+
+
+    def divide_train_test(self):
+        data_length = len(self.total_data)
+        self.train_num = np.int(np.floor(data_length*self.train_prop))
+        self.train_data = self.total_data[0:self.train_num]
+        self.test_data = self.total_data[self.train_num:data_length]
+
 
 
 
