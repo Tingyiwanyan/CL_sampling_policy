@@ -6,7 +6,8 @@ from sklearn.metrics import recall_score
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
-
+import tensorflow as tf
+import numpy as np
 
 class knn_cl():
     """
@@ -18,11 +19,28 @@ class knn_cl():
         self.read_d = read_d
         self.train_data = read_d.train_data
         self.test_data = read_d.test_data
+        self.train_data_label = read_d.train_data_label
+        self.test_data_label = read_d.test_data_label
         self.latent_dim = 50
+        self.gamma = 2
+        self.tau = 1.5
+        self.softmax_weight_threshold = 0.1
+        self.epoch = 2
+        self.input_size = self.latent_dim
         self.item_size = 7
         self.time_sequence = 4
-        self.train_data = read_d.train_data
+        self.batch_size = 64
+        self.train_sepsis_group = read_d.train_sepsis_group
+        self.train_non_sepsis_group = read_d.train_non_sepsis_group
         self.test_data = read_d.test_data
+        self.size_for_pos_knn_construction = 100
+        self.size_for_neg_knn_construction = 200
+        self.positive_lab_size = 5
+        self.negative_lab_size = 20
+        self.positive_sample_size = self.positive_lab_size
+        self.negative_sample_size = self.negative_lab_size
+        self.knn_neighbor_numbers = self.positive_lab_size
+
         """
         define LSTM variables
         """
@@ -42,14 +60,14 @@ class knn_cl():
         self.init_cell_state_weight = tf.keras.initializers.he_normal(seed=None)
         self.weight_forget_gate = \
             tf.Variable(
-                self.init_forget_gate(shape=(self.item_size + self.lab_size + self.latent_dim, self.latent_dim)))
+                self.init_forget_gate(shape=(self.item_size + self.latent_dim, self.latent_dim)))
         self.weight_info_gate = \
-            tf.Variable(self.init_info_gate(shape=(self.item_size + self.lab_size + self.latent_dim, self.latent_dim)))
+            tf.Variable(self.init_info_gate(shape=(self.item_size + self.latent_dim, self.latent_dim)))
         self.weight_cell_state = \
-            tf.Variable(self.init_cell_state(shape=(self.item_size + self.lab_size + self.latent_dim, self.latent_dim)))
+            tf.Variable(self.init_cell_state(shape=(self.item_size + self.latent_dim, self.latent_dim)))
         self.weight_output_gate = \
             tf.Variable(
-                self.init_output_gate(shape=(self.item_size + self.lab_size + self.latent_dim, self.latent_dim)))
+                self.init_output_gate(shape=(self.item_size + self.latent_dim, self.latent_dim)))
         self.bias_forget_gate = tf.Variable(self.init_forget_gate_weight(shape=(self.latent_dim,)))
         self.bias_info_gate = tf.Variable(self.init_info_gate_weight(shape=(self.latent_dim,)))
         self.bias_cell_state = tf.Variable(self.init_cell_state_weight(shape=(self.latent_dim,)))
@@ -59,8 +77,6 @@ class knn_cl():
     def lstm_cell(self):
         cell_state = []
         hidden_rep = []
-        self.project_input = tf.math.add(tf.matmul(self.input_x, self.weight_projection_w), self.bias_projection_b)
-        # self.project_input = tf.matmul(self.input_x, self.weight_projection_w)
         for i in range(self.time_sequence):
             x_input_cur = tf.gather(self.input_x, i, axis=1)
             if i == 0:
@@ -131,7 +147,7 @@ class knn_cl():
 
     def assign_patient_value_physionet(self,center_node_index,label):
         one_sample = np.zeros((self.time_sequence,self.item_size))
-        one_sample_single = np.zers(self.item_size)
+        one_sample_single = np.zeros(self.item_size)
         name = self.read_d.file_path+center_node_index
         table = np.array(pd.read_table(name,sep="|"))
         if label == 1:
@@ -159,9 +175,9 @@ class knn_cl():
 
         self.positive_patient_id_list = []
         if label == 0:
-            neighbor_patient = self.read_d.non_sepsis_group
+            neighbor_patient = self.read_d.train_non_sepsis_group
         else:
-            neighbor_patient = self.read_d.sepsis_group
+            neighbor_patient = self.read_d.train_sepsis_group
         self.patient_pos_sample_vital[:, 0, :] = self.assign_patient_value_physionet(center_node_index,label)
 
         for i in range(self.positive_lab_size):
@@ -170,23 +186,28 @@ class knn_cl():
                 patient_id = neighbor_patient[index_neighbor]
                 self.positive_patient_id_list.append(patient_id)
                 self.patient_pos_sample_vital[:, i + 1, :] = self.assign_patient_value_physionet(patient_id,label)
+            if mode == "proximity":
+                neighbor_patient = self.knn_neighbor[center_node_index]['knn_neighbor']
+                patient_id = neighbor_patient[i]
+                self.positive_patient_id_list.append(patient_id)
+                self.patient_pos_sample_vital[:, i + 1, :] = self.assign_patient_value_physionet(patient_id, label)
 
 
-    def get_negative_patient(self,center_node_index,label):
+    def get_negative_patient(self,label):
         self.patient_neg_sample_vital = np.zeros((self.time_sequence, self.negative_lab_size, self.item_size))
         if label == 0:
             flag = 1
-            neighbor_patient = self.read_d.sepsis_group
+            neighbor_patient = self.read_d.train_sepsis_group
         else:
             flag = 0
-            neighbor_patient = self.read_d.non_sepsis_group
+            neighbor_patient = self.read_d.train_non_sepsis_group
 
         for i in range(self.negative_lab_size):
-            #index_neighbor = np.int(np.floor(np.random.uniform(0, len(neighbor_patient), 1)))
-            patient_id = self.neg_patient_id[i]
-            if patient_id == center_node_index:
-                continue
-            #patient_id = neighbor_patient[index_neighbor]
+            index_neighbor = np.int(np.floor(np.random.uniform(0, len(neighbor_patient), 1)))
+            #patient_id = self.neg_patient_id[i]
+            #if patient_id == center_node_index:
+                #continue
+            patient_id = neighbor_patient[index_neighbor]
             self.patient_neg_sample_vital[:, i, :] = self.assign_patient_value_physionet(patient_id,flag)
 
 
@@ -229,7 +250,6 @@ class knn_cl():
 
     def config_model(self):
         self.lstm_cell()
-        self.demo_layer()
         self.build_dhgm_model()
         self.get_latent_rep_hetero()
         self.contrastive_loss()
@@ -327,11 +347,9 @@ class knn_cl():
         self.real_logit = np.zeros((data_length, 1))
         self.neg_patient_id = []
         for i in range(data_length):
-            self.patient_id = data[start_index + i]
-            self.neg_patient_id.append(self.patient_id)
-        for i in range(data_length):
             self.check_patient = i
             self.patient_id = data[start_index + i]
+            self.neg_patient_id.append(self.patient_id)
             self.patient_label = data_label[start_index + i]
             self.real_logit[i, 0] = self.patient_label
 
@@ -339,39 +357,36 @@ class knn_cl():
             perform different mode positive&negative sampling
             """
             self.get_positive_patient(self.patient_id,self.patient_label,mode)
-            self.get_negative_patient(self.patient_id,self.patient_label)
+            self.get_negative_patient(self.patient_label)
             train_one_data_vital = np.concatenate((self.patient_pos_sample_vital, self.patient_neg_sample_vital),
                                                   axis=1)
             train_one_batch_vital[i, :, :, :] = train_one_data_vital
 
         return train_one_batch_vital
 
-    def construct_knn_graph(self):
+    def construct_knn_graph(self,data,data_label):
         """
         construct knn graph at every epoch
         """
-        self.length_train = len(self.train_data)
+        self.length_train = len(data)
         iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
 
-        self.knn_sim_matrix = np.zeros((iteration * self.batch_size, self.latent_dim + self.latent_dim_demo))
+        self.knn_sim_matrix = np.zeros((iteration * self.batch_size, self.latent_dim))
         self.knn_neighbor = {}
         self.knn_neg_neighbor = {}
 
         init_hidden_state = np.zeros(
             (self.batch_size, 1 + self.positive_lab_size + self.negative_lab_size, self.latent_dim))
         for i in range(iteration):
-            self.train_one_batch_vital, self.train_one_batch_lab, self.train_one_batch_demo, self.one_batch_logit, self.one_batch_mortality, self.one_batch_com, self.one_batch_icu_intubation = self.get_batch_train_origin(
-                self.batch_size, i * self.batch_size, self.train_data)
+            self.train_one_batch_vital = self.get_batch_train(
+                self.batch_size, i * self.batch_size, data,data_label,"random")
             self.test_patient = self.sess.run(self.Dense_patient,
-                                              feed_dict={self.input_x_vital: self.train_one_batch_vital,
-                                                         self.init_hiddenstate: init_hidden_state,
-                                                         self.input_icu_intubation: self.one_batch_icu_intubation})[
-                                :,
-                                0, :]
+                                              feed_dict={self.input_x: self.train_one_batch_vital,
+                                                         self.init_hiddenstate: init_hidden_state,})[:,0, :]
             self.knn_sim_matrix[i * self.batch_size:(i + 1) * self.batch_size, :] = self.test_patient
 
         for i in range(iteration * self.batch_size):
-            center_patient_id = self.train_data[i]
+            center_patient_id = data[i]
             self.knn_neighbor[center_patient_id] = {}
             self.knn_neighbor[center_patient_id]['knn_neighbor'] = []
             self.knn_neighbor[center_patient_id]['index'] = 0
@@ -389,8 +404,8 @@ class knn_cl():
             # print(i)
             # vec = np.argsort(self.knn_sim_score_matrix[i,:])
             vec = vec_compare[i, :][::-1]
-            center_patient_id = self.train_data[i]
-            center_flag = self.kg.dic_patient[center_patient_id]['death_flag']
+            center_patient_id = data[i]
+            center_flag = data_label[i]
             # index = self.knn_neighbor[center_patient_id]['index']
             # index_real = 0
             for j in range(iteration * self.batch_size):
@@ -399,74 +414,16 @@ class knn_cl():
                     break
                 # if index_real == self.check_num_threshold_pos:
                 # break
-                compare_patient_id = self.train_data[vec[j]]
+                compare_patient_id = data[vec[j]]
                 if compare_patient_id == center_patient_id:
                     continue
-                flag = self.kg.dic_patient[compare_patient_id]['death_flag']
+                flag = data_label[vec[j]]
                 if center_flag == flag:
                     # if i in vec_compare[vec[j],:][::-1][0:self.check_num_threshold_pos]:
                     if not compare_patient_id in self.knn_neighbor[center_patient_id]['knn_neighbor']:
                         self.knn_neighbor[center_patient_id].setdefault('knn_neighbor', []).append(compare_patient_id)
                         self.knn_neighbor[center_patient_id]['index'] = self.knn_neighbor[center_patient_id][
                                                                             'index'] + 1
-                        """
-                        index_compare = self.knn_neighbor[compare_patient_id]['index']
-                        if index_compare < self.knn_neighbor_numbers:
-                            if not center_patient_id in self.knn_neighbor[compare_patient_id]['knn_neighbor']:
-                                self.knn_neighbor[compare_patient_id].setdefault('knn_neighbor', []).append(
-                                    center_patient_id)
-                                self.knn_neighbor[compare_patient_id]['index'] = self.knn_neighbor[compare_patient_id][
-                                                                                    'index'] + 1
-                        """
-                    # index_real = index_real + 1
-            """
-            index_real_neg = 0
-            for j in range(iteration * self.batch_size):
-                index = self.knn_neg_neighbor[center_patient_id]['index']
-                if index == self.negative_lab_size or index > self.negative_lab_size:
-                    break
-                if index_real_neg == self.check_num_threshold_neg:
-                    break
-                compare_patient_id = self.train_data[vec[j]]
-                if compare_patient_id == center_patient_id:
-                    continue
-                flag = self.kg.dic_patient[compare_patient_id]['death_flag']
-                if not center_flag == flag:
-                    if i in vec_compare[vec[j], :][::-1][0:self.check_num_threshold_neg]:
-                        if not compare_patient_id in self.knn_neg_neighbor[center_patient_id]['knn_neighbor']:
-                            self.knn_neg_neighbor[center_patient_id].setdefault('knn_neighbor', []).append(
-                                compare_patient_id)
-                            self.knn_neg_neighbor[center_patient_id]['index'] = self.knn_neg_neighbor[center_patient_id][
-                                                                                'index'] + 1
-
-                        index_compare = self.knn_neg_neighbor[compare_patient_id]['index']
-                        if index_compare < self.negative_lab_size:
-                            if not center_patient_id in self.knn_neg_neighbor[compare_patient_id]['knn_neighbor']:
-                                self.knn_neg_neighbor[compare_patient_id].setdefault('knn_neighbor', []).append(
-                                    center_patient_id)
-                                self.knn_neg_neighbor[compare_patient_id]['index'] = self.knn_neg_neighbor[compare_patient_id][
-                                                                                     'index'] + 1
-                    index_real_neg = index_real_neg + 1
-            """
-            """
-            index_neg = 0
-            index_real_neg = 0
-            for j in range(iteration*self.batch_size):
-                if index_neg == self.negative_lab_size:
-                    break
-                compare_patient_id = self.train_data[vec[j]]
-                if compare_patient_id == center_patient_id:
-                    continue
-                flag = self.kg.dic_patient[compare_patient_id]['death_flag']
-                if not center_flag == flag:
-                    if center_patient_id not in self.knn_neg_neighbor.keys():
-                        self.knn_neg_neighbor[center_patient_id] = {}
-                        self.knn_neg_neighbor[center_patient_id].setdefault('knn_neighbor', []).append(compare_patient_id)
-                    else:
-                        self.knn_neg_neighbor[center_patient_id].setdefault('knn_neighbor', []).append(compare_patient_id)
-
-                    index_neg = index_neg + 1
-            """
 
 
     def construct_knn_graph_attribute(self):
@@ -528,138 +485,11 @@ class knn_cl():
 
         return highest_neighbor
 
-    def get_positive_patient_knn(self, center_node_index):
-        self.patient_pos_sample_vital = np.zeros((self.time_sequence, self.positive_lab_size + 1, self.item_size))
-        self.patient_pos_sample_lab = np.zeros((self.time_sequence, self.positive_lab_size + 1, self.lab_size))
-        self.patient_pos_sample_icu_intubation_label = np.zeros((self.time_sequence, self.positive_lab_size + 1, 2))
-        self.patient_pos_sample_demo = np.zeros((self.positive_lab_size + 1, self.demo_size))
-        self.patient_pos_sample_com = np.zeros((self.positive_lab_size + 1, self.com_size))
-        if self.kg.dic_patient[center_node_index]['death_flag'] == 0:
-            flag = 0
-            neighbor_patient_ = self.kg.dic_death[0]
-        else:
-            flag = 1
-            neighbor_patient_ = self.kg.dic_death[1]
-        neighbor_patient = self.knn_neighbor[center_node_index]['knn_neighbor']
-        if len(neighbor_patient) == 0:
-            neighbor_patient = [center_node_index]
 
-        time_seq = self.kg.dic_patient[center_node_index]['prior_time_vital'].keys()
-        time_seq_int = [np.int(k) for k in time_seq]
-        time_seq_int.sort()
-        # time_index = 0
-        # for j in self.time_seq_int:
-        for j in range(self.time_sequence):
-            # if time_index == self.time_sequence:
-            #    break
-            if flag == 0:
-                pick_death_hour = self.kg.dic_patient[center_node_index][
-                    'pick_time']  # self.kg.mean_death_time + np.int(np.floor(np.random.normal(0, 20, 1)))
-                start_time = pick_death_hour - self.predict_window_prior + float(j) * self.time_step_length
-                end_time = start_time + self.time_step_length
-            else:
-                start_time = self.kg.dic_patient[center_node_index]['death_hour'] - self.predict_window_prior + float(
-                    j) * self.time_step_length
-                end_time = start_time + self.time_step_length
-            one_data_vital = self.assign_value_patient(center_node_index, start_time, end_time)
-            one_data_lab = self.assign_value_lab(center_node_index, start_time, end_time)
-            # one_data_icu_label = self.assign_value_icu_intubation(center_node_index, start_time, end_time)
-            # one_data_demo = self.assign_value_demo(center_node_index)
-            self.patient_pos_sample_vital[j, 0, :] = one_data_vital
-            self.patient_pos_sample_lab[j, 0, :] = one_data_lab
-            # self.patient_pos_sample_icu_intubation_label[j,0,:] = one_data_icu_label
-            # time_index += 1
-        one_data_demo = self.assign_value_demo(center_node_index)
-        # one_data_com = self.assign_value_com(center_node_index)
-        self.patient_pos_sample_demo[0, :] = one_data_demo
-        # self.patient_pos_sample_com[0,:] = one_data_com
-        for i in range(self.positive_lab_size):
-            index_neighbor = np.int(np.floor(np.random.uniform(0, len(neighbor_patient), 1)))
-            patient_id = neighbor_patient[index_neighbor]
-            time_seq = self.kg.dic_patient[patient_id]['prior_time_vital'].keys()
-            time_seq_int = [np.int(k) for k in time_seq]
-            time_seq_int.sort()
-            one_data_demo = self.assign_value_demo(patient_id)
-            # one_data_com = self.assign_value_com(patient_id)
-            self.patient_pos_sample_demo[i + 1, :] = one_data_demo
-            # self.patient_pos_sample_com[i+1,:] = one_data_com
-            # time_index = 0
-            # for j in time_seq_int:
-            for j in range(self.time_sequence):
-                # if time_index == self.time_sequence:
-                #   break
-                # self.time_index = np.int(j)
-                # start_time = float(j)*self.time_step_length
-                # end_time = start_time + self.time_step_length
-                if flag == 0:
-                    pick_death_hour = self.kg.dic_patient[center_node_index][
-                        'pick_time']  # self.kg.mean_death_time + np.int(np.floor(np.random.normal(0, 20, 1)))
-                    start_time = pick_death_hour - self.predict_window_prior + float(j) * self.time_step_length
-                    end_time = start_time + self.time_step_length
-                else:
-                    start_time = self.kg.dic_patient[patient_id]['death_hour'] - self.predict_window_prior + float(
-                        j) * self.time_step_length
-                    end_time = start_time + self.time_step_length
-                one_data_vital = self.assign_value_patient(patient_id, start_time, end_time)
-                one_data_lab = self.assign_value_lab(patient_id, start_time, end_time)
-                # one_data_icu_label = self.assign_value_icu_intubation(patient_id, start_time, end_time)
-                self.patient_pos_sample_vital[j, i + 1, :] = one_data_vital
-                self.patient_pos_sample_lab[j, i + 1, :] = one_data_lab
-                # self.patient_pos_sample_icu_intubation_label[j,i+1,:] = one_data_icu_label
-                # time_index += 1
-
-
-    def train_fl(self):
-        self.length_train = len(self.train_data)
-        init_hidden_state = np.zeros(
-            (self.batch_size, 1 + self.positive_lab_size + self.negative_lab_size, self.latent_dim))
-        iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
-
-        for i in range(iteration):
-            self.train_one_batch_vital, self.train_one_batch_lab, self.train_one_batch_demo, self.one_batch_logit, self.one_batch_mortality, self.one_batch_com, self.one_batch_icu_intubation = self.get_batch_train_origin(
-                self.batch_size, i * self.batch_size, self.train_data)
-
-            self.err_ = self.sess.run([self.cross_entropy, self.train_step_fl],
-                                      feed_dict={self.input_x_vital: self.train_one_batch_vital,
-                                                 self.input_x_lab: self.train_one_batch_lab,
-                                                 self.input_x_demo: self.train_one_batch_demo,
-                                                 # self.input_x_com: self.one_batch_com,
-                                                 # self.lab_test: self.one_batch_item,
-                                                 self.input_y_logit: self.real_logit,
-                                                 self.mortality: self.one_batch_mortality,
-                                                 self.init_hiddenstate: init_hidden_state,
-                                                 self.input_icu_intubation: self.one_batch_icu_intubation})
-            print(self.err_[0])
-
-    def train_ce(self):
-        self.length_train = len(self.train_data)
-        init_hidden_state = np.zeros(
-            (self.batch_size, 1 + self.positive_lab_size + self.negative_lab_size, self.latent_dim))
-        iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
-
-        for i in range(iteration):
-            self.train_one_batch_vital, self.train_one_batch_lab, self.train_one_batch_demo, self.one_batch_logit, self.one_batch_mortality, self.one_batch_com, self.one_batch_icu_intubation = self.get_batch_train_origin(
-                self.batch_size, i * self.batch_size, self.train_data)
-
-            self.err_ = self.sess.run([self.cross_entropy, self.train_step_ce],
-                                      feed_dict={self.input_x_vital: self.train_one_batch_vital,
-                                                 self.input_x_lab: self.train_one_batch_lab,
-                                                 self.input_x_demo: self.train_one_batch_demo,
-                                                 # self.input_x_com: self.one_batch_com,
-                                                 # self.lab_test: self.one_batch_item,
-                                                 self.input_y_logit: self.real_logit,
-                                                 self.mortality: self.one_batch_mortality,
-                                                 self.init_hiddenstate: init_hidden_state,
-                                                 self.input_icu_intubation: self.one_batch_icu_intubation})
-            print(self.err_[0])
-
-    def train(self):
+    def train(self,data,data_label):
         """
         train the system
         """
-        # self.area_total = []
-        # self.auprc_total = []
-        self.length_train = len(self.train_data)
         init_hidden_state = np.zeros(
             (self.batch_size, 1 + self.positive_lab_size + self.negative_lab_size, self.latent_dim))
         iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
@@ -670,73 +500,40 @@ class knn_cl():
             print(j)
             # self.construct_knn_graph()
             for i in range(iteration):
-                self.train_one_batch_vital, self.train_one_batch_lab, self.train_one_batch_demo, self.one_batch_logit, self.one_batch_mortality, self.one_batch_com, self.one_batch_icu_intubation = self.get_batch_train_origin(
-                    self.batch_size, i * self.batch_size, self.train_data)
+                self.train_one_batch_vital = self.get_batch_train(self.batch_size, i * self.batch_size,
+                                                                  data,data_label,"random")
 
-                self.err_ = self.sess.run([self.cross_entropy, self.train_step_cl],
-                                          feed_dict={self.input_x_vital: self.train_one_batch_vital,
-                                                     self.input_x_lab: self.train_one_batch_lab,
-                                                     self.input_x_demo: self.train_one_batch_demo,
-                                                     # self.input_x_com: self.one_batch_com,
-                                                     # self.lab_test: self.one_batch_item,
+                self.err_ = self.sess.run([self.cross_entropy, self.train_step_fl],
+                                          feed_dict={self.input_x: self.train_one_batch_vital,
                                                      self.input_y_logit: self.real_logit,
-                                                     self.mortality: self.one_batch_mortality,
-                                                     self.init_hiddenstate: init_hidden_state,
-                                                     self.input_icu_intubation: self.one_batch_icu_intubation})
+                                                     self.init_hiddenstate: init_hidden_state})
                 print(self.err_[0])
 
-                """
-                self.err_lstm = self.sess.run([self.cross_entropy, self.train_step_cross_entropy,self.init_hiddenstate,self.output_layer,self.logit_sig],
-                                     feed_dict={self.input_x: self.train_one_batch,
-                                                self.input_y_logit: self.one_batch_logit,
-                                                self.init_hiddenstate:init_hidden_state})
-                print(self.err_lstm[0])
-                """
-            # self.test(self.test_data)
-            # self.cal_auc()
-            # self.cal_auprc()
-            # self.area_total.append(self.area)
-            # self.auprc_total.append(self.area_auprc)
-
-    def train_att(self):
-        """
-        train the system
-        """
-        # self.area_total = []
-        # self.auprc_total = []
-        self.length_train = len(self.train_data)
+    def pretrain_random(self,data,data_label):
+        self.length_train = len(data)
         init_hidden_state = np.zeros(
             (self.batch_size, 1 + self.positive_lab_size + self.negative_lab_size, self.latent_dim))
         iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
 
-        self.construct_knn_graph_attribute()
         for j in range(self.epoch):
             print('epoch')
             print(j)
-            # self.construct_knn_graph()
             for i in range(iteration):
-                self.train_one_batch_vital, self.train_one_batch_lab, self.train_one_batch_demo, self.one_batch_logit, self.one_batch_mortality, self.one_batch_com, self.one_batch_icu_intubation = self.get_batch_train(
-                    self.batch_size, i * self.batch_size, self.train_data)
+                self.train_one_batch_vital = self.get_batch_train(self.batch_size, i * self.batch_size,
+                                                                  data,data_label,"random")
 
                 self.err_ = self.sess.run([self.cross_entropy, self.train_step_cl],
-                                          feed_dict={self.input_x_vital: self.train_one_batch_vital,
-                                                     self.input_x_lab: self.train_one_batch_lab,
-                                                     self.input_x_demo: self.train_one_batch_demo,
-                                                     # self.input_x_com: self.one_batch_com,
-                                                     # self.lab_test: self.one_batch_item,
+                                          feed_dict={self.input_x: self.train_one_batch_vital,
                                                      self.input_y_logit: self.real_logit,
-                                                     self.mortality: self.one_batch_mortality,
-                                                     self.init_hiddenstate: init_hidden_state,
-                                                     self.input_icu_intubation: self.one_batch_icu_intubation})
+                                                     self.init_hiddenstate: init_hidden_state})
                 print(self.err_[0])
 
-    def train_combine(self):
+
+    def pretrain_proximity(self,data,data_label):
         """
         train the system
         """
-        # self.area_total = []
-        # self.auprc_total = []
-        self.length_train = len(self.train_data)
+        self.length_train = len(data)
         init_hidden_state = np.zeros(
             (self.batch_size, 1 + self.positive_lab_size + self.negative_lab_size, self.latent_dim))
         iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
@@ -745,107 +542,42 @@ class knn_cl():
             print('epoch')
             print(j)
             if not j == 0:
-                self.construct_knn_graph()
+                self.construct_knn_graph(data,data_label)
             for i in range(iteration):
                 if j == 0:
-                    self.train_one_batch_vital, self.train_one_batch_lab, self.train_one_batch_demo, self.one_batch_logit, self.one_batch_mortality, self.one_batch_com, self.one_batch_icu_intubation = self.get_batch_train_origin(
-                        self.batch_size, i * self.batch_size, self.train_data)
+                    self.train_one_batch_vital = self.get_batch_train(
+                        self.batch_size, i * self.batch_size,data,data_label,"random")
 
                     self.err_ = self.sess.run([self.cross_entropy, self.train_step_cl],
-                                              feed_dict={self.input_x_vital: self.train_one_batch_vital,
-                                                         self.input_x_lab: self.train_one_batch_lab,
-                                                         self.input_x_demo: self.train_one_batch_demo,
-                                                         # self.input_x_com: self.one_batch_com,
-                                                         # self.lab_test: self.one_batch_item,
+                                              feed_dict={self.input_x: self.train_one_batch_vital,
                                                          self.input_y_logit: self.real_logit,
-                                                         self.mortality: self.one_batch_mortality,
-                                                         self.init_hiddenstate: init_hidden_state,
-                                                         self.input_icu_intubation: self.one_batch_icu_intubation})
+                                                         self.init_hiddenstate: init_hidden_state,})
                 else:
-                    self.train_one_batch_vital, self.train_one_batch_lab, self.train_one_batch_demo, self.one_batch_logit, self.one_batch_mortality, self.one_batch_com, self.one_batch_icu_intubation = self.get_batch_train(
-                        self.batch_size, i * self.batch_size, self.train_data)
+                    self.train_one_batch_vital = self.get_batch_train(
+                        self.batch_size, i * self.batch_size, data,data_label,"proximity")
 
                     self.err_ = self.sess.run([self.cross_entropy, self.train_step_cl],
-                                              feed_dict={self.input_x_vital: self.train_one_batch_vital,
-                                                         self.input_x_lab: self.train_one_batch_lab,
-                                                         self.input_x_demo: self.train_one_batch_demo,
-                                                         # self.input_x_com: self.one_batch_com,
-                                                         # self.lab_test: self.one_batch_item,
+                                              feed_dict={self.input_x: self.train_one_batch_vital,
                                                          self.input_y_logit: self.real_logit,
-                                                         self.mortality: self.one_batch_mortality,
-                                                         self.init_hiddenstate: init_hidden_state,
-                                                         self.input_icu_intubation: self.one_batch_icu_intubation})
+                                                         self.init_hiddenstate: init_hidden_state, })
                 print(self.err_[0])
 
-            # self.test(self.test_data)
-            # self.cal_auc()
-            # self.cal_auprc()
-            # self.area_total.append(self.area)
-            # self.auprc_total.append(self.area_auprc)
 
-    def test(self, data):
-        Death = np.zeros([1, 2])
-        Death[0][1] = 1
+    def test(self, data, data_label):
         test_length = len(data)
         init_hidden_state = np.zeros(
             (test_length, 1 + self.positive_lab_size + self.negative_lab_size, self.latent_dim))
-        self.test_data_batch_vital, self.test_one_batch_lab, self.test_one_batch_demo, self.test_logit, self.test_mortality, self.test_com, self.one_batch_icu_intubation = self.get_batch_train_origin(
-            test_length, 0, data)
-        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x_vital: self.test_data_batch_vital,
-                                                                  self.input_x_lab: self.test_one_batch_lab,
-                                                                  self.input_x_demo: self.test_one_batch_demo,
-                                                                  # self.input_x_com: self.test_com,
-                                                                  self.init_hiddenstate: init_hidden_state,
-                                                                  self.input_icu_intubation: self.one_batch_icu_intubation})
+        self.test_data_batch_vital = self.get_batch_train(test_length, 0, data,data_label,"random")
+        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.test_data_batch_vital,
+                                                                  self.init_hiddenstate: init_hidden_state})
 
-        self.out_test_patient = self.sess.run(self.Dense_patient,
-                                              feed_dict={self.input_x_vital: self.test_data_batch_vital,
-                                                         self.input_x_lab: self.test_one_batch_lab,
-                                                         self.input_x_demo: self.test_one_batch_demo,
-                                                         # self.input_x_com: self.test_com,
-                                                         self.init_hiddenstate: init_hidden_state,
-                                                         self.input_icu_intubation: self.one_batch_icu_intubation})[:,
-                                0, :]
-        """
-        self.test_att_score = self.sess.run([self.score_attention,self.input_importance,self.input_x],feed_dict={self.input_x_vital: self.test_data_batch_vital,
-                                                                         self.input_x_lab: self.test_one_batch_lab,
-                                                                         self.input_x_demo: self.test_one_batch_demo,
-                                                                         self.init_hiddenstate: init_hidden_state,
-                                                                         self.Death_input: Death,
-                                                                         self.input_icu_intubation:self.one_batch_icu_intubation})
-        """
-
-        """
-        self.correct_predict_death = np.array(self.correct_predict_death)
-
-        feature_len = self.item_size + self.lab_size
-
-
-        self.test_data_scores = self.test_att_score[1][self.correct_predict_death,:,0,:]
-        self.ave_data_scores = np.zeros((self.time_sequence,feature_len))
-
-        count = 0
-        value = 0
-
-        for j in range(self.time_sequence):
-            for p in range(feature_len):
-                for i in range(self.correct_predict_death.shape[0]):
-                    if self.test_data_scores[i,j,p]!=0:
-                        count += 1
-                        value += self.test_data_scores[i,j,p]
-                if count == 0:
-                    continue
-                self.ave_data_scores[j,p] = float(value/count)
-                count = 0
-                value = 0
-        """
 
         self.tp_correct = 0
         self.tp_neg = 0
         for i in range(test_length):
-            if self.test_logit[i, 1] == 1:
+            if self.real_logit[i, 0] == 1:
                 self.tp_correct += 1
-            if self.test_logit[i, 0] == 1:
+            if self.real_logit[i, 0] == 0:
                 self.tp_neg += 1
 
         threshold = -1.01
@@ -890,103 +622,6 @@ class knn_cl():
             self.recall_total.append(recall_test)
             threshold += self.resolution
             self.out_logit_integer = np.zeros(self.out_logit.shape[0])
-
-    def bootstraping(self):
-        self.config_model()
-        self.sess = tf.InteractiveSession()
-        tf.global_variables_initializer().run()
-        tf.local_variables_initializer().run()
-        self.train_data = self.train_data_whole[i]
-        self.test_data = self.test_data_whole[i]
-        # self.construct_knn_graph_attribute()
-        # print("im here in train representation")
-        # self.train_representation()
-        print("im here in train")
-        self.train()
-        self.test(self.test_data)
-
-    def acc_epoch(self):
-        self.f1_score_total = []
-        self.acc_total = []
-        self.area_total = []
-        self.auprc_total = []
-        self.test_logit_total = []
-        self.tp_score_total = []
-        self.fp_score_total = []
-        self.precision_score_total = []
-        self.precision_curve_total = []
-        self.recall_score_total = []
-        self.recall_curve_total = []
-        self.test_patient_whole = []
-
-        self.config_model()
-
-    def cross_validation(self):
-        self.f1_score_total = []
-        self.acc_total = []
-        self.area_total = []
-        self.auprc_total = []
-        self.test_logit_total = []
-        self.tp_score_total = []
-        self.fp_score_total = []
-        self.precision_score_total = []
-        self.precision_curve_total = []
-        self.recall_score_total = []
-        self.recall_curve_total = []
-        self.test_patient_whole = []
-        # feature_len = self.item_size + self.lab_size
-        # self.ave_data_scores_total = np.zeros((self.time_sequence, feature_len))
-        # self.generate_orthogonal_relatoin()
-
-        self.config_model()
-        for i in range(3):
-            self.sess = tf.InteractiveSession()
-            tf.global_variables_initializer().run()
-            tf.local_variables_initializer().run()
-            self.train_data = self.train_data_whole[i]
-            self.test_data = self.test_data_whole[i]
-            # self.construct_knn_graph_attribute()
-            print("im here in train representation")
-            self.train_representation()
-            print("im here in train")
-            self.train()
-            self.test(self.test_data)
-            # self.f1_score_total.append(self.f1_test)
-            # self.acc_total.append(self.acc)
-            self.tp_score_total.append(self.tp_total)
-            self.fp_score_total.append(self.fp_total)
-            self.cal_auc()
-            self.cal_auprc()
-            self.area_total.append(self.area)
-            self.auprc_total.append(self.area_auprc)
-            # self.precision_score_total.append(self.precision_test)
-            # self.recall_score_total.append(self.recall_test)
-            # self.precision_curve_total.append(self.precision_total)
-            # self.recall_curve_total.append(self.recall_total)
-            # self.test_patient_whole.append(self.test_patient)
-            self.test_logit_total.append(self.test_logit)
-            # self.ave_data_scores_total += self.ave_data_scores
-            self.sess.close()
-
-        # self.ave_data_scores_total = self.ave_data_scores_total/5
-        # self.norm = np.linalg.norm(self.ave_data_scores_total)
-        # self.ave_data_scores_total = self.ave_data_scores_total/self.norm
-        self.tp_ave_score = np.sum(self.tp_score_total, 0) / 5
-        self.fp_ave_score = np.sum(self.fp_score_total, 0) / 5
-        self.precision_ave_score = np.sum(self.precision_curve_total, 0) / 5
-        self.recall_ave_score = np.sum(self.recall_curve_total, 0) / 5
-        # print("f1_ave_score")
-        # print(np.mean(self.f1_score_total))
-        # print("acc_ave_score")
-        # print(np.mean(self.acc_total))
-        print("area_ave_score")
-        print(np.mean(self.area_total))
-        # print("precision_ave_score")
-        # print(np.mean(self.precision_total))
-        # print("recall_ave_score")
-        # print(np.mean(self.recall_total))
-        print("auprc_ave_score")
-        print(np.mean(self.auprc_total))
 
     def cal_auc(self):
         self.area = 0
