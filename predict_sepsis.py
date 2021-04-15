@@ -42,8 +42,8 @@ class read_data():
     def generate_lib(self):
         count = 0
         for i in self.file_names:
-            #if count > self.total_size:
-               # break
+            if count > self.total_size:
+                break
             name = self.file_path+i
             patient_table = np.array(pd.read_table(name, sep="|"))
 
