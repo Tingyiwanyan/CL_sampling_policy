@@ -49,7 +49,7 @@ class read_data():
 
             if 1 in patient_table[:,40]:
                 sepsis_on_set_time = np.where(patient_table[:, 40] == 1)[0][0]
-                if sepsis_on_set_time < 3:
+                if sepsis_on_set_time < 5:
                     continue
                 else:
                     self.sepsis_group.append(i)
