@@ -3,7 +3,8 @@
   <component name="ChangeListManager">
     <list default="true" id="31baeeb3-fc4b-473a-a6ed-2bdfec0ffede" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/predict_sepsis.py" beforeDir="false" afterPath="$PROJECT_DIR$/predict_sepsis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/process_mimic4.py" beforeDir="false" afterPath="$PROJECT_DIR$/process_mimic4.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tradition_baseline.py" beforeDir="false" afterPath="$PROJECT_DIR$/tradition_baseline.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -18,7 +19,7 @@
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="PropertiesComponent">
     <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$/../mimic4_code" />
+    <property name="last_opened_file_path" value="$USER_HOME$/multiplex_EHR" />
   </component>
   <component name="RunDashboard">
     <option name="ruleStates">
@@ -50,7 +51,9 @@
       <map>
         <entry key="MAIN">
           <value>
-            <State />
+            <State>
+              <option name="COLUMN_ORDER" />
+            </State>
           </value>
         </entry>
       </map>
