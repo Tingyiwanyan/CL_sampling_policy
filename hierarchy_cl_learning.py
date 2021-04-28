@@ -47,7 +47,7 @@ class hier_cl():
         self.negative_sample_size = self.negative_lab_size
         self.knn_neighbor_numbers = self.positive_lab_size
 
-        self.input_x_comor = self.input_x = tf.keras.backend.placeholder(
+        self.input_x_comor = tf.keras.backend.placeholder(
             [None, 1 + self.positive_lab_size + self.negative_lab_size, self.length_comor])
 
         """

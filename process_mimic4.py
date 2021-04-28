@@ -7,6 +7,7 @@ import json
 from os import listdir
 from hierarchy_cl_learning import hier_cl
 from tradition_baseline import tradition_b
+from deep_learning_appro import dp_appro
 
 
 class read_data_mimic():
@@ -17,7 +18,9 @@ class read_data_mimic():
         self.file_path_vital = '/home/tingyi/MIMIC_4_DATA/vital_sepsis/'
         self.file_path_lab = '/home/tingyi/MIMIC_4_DATA/lab_sepsis/'
         self.file_path_static = '/home/tingyi/MIMIC_4_DATA/static_sepsis/'
-        self.file_names_vital = listdir(self.file_path_vital)
+        file = open("stay_id.txt","r")
+        content = file.read()
+        self.file_names_vital = content.split("\n") #listdir(self.file_path_vital)
         self.data_length = len(self.file_names_vital)
         self.train_percent = 0.8
         self.test_percent = 0.2
@@ -28,12 +31,20 @@ class read_data_mimic():
         self.predict_window = 4
         self.lab_length = 25
         self.vital_length = 9
+        self.static_length = 19
         self.vital_column = ['heart_rate', 'sbp', 'dbp', 'mbp', 'resp_rate', 'temperature', 'spo2', 'glucose', 'gcs']
         self.lab_column = ['bicarbonate','bun','calcium','chloride','creatinine','sodium','potassium','po2',
                            'pco2','paofio2ratio','ph','baseexcess','lactate','hematocrit','hemoglobin','platelet','wbc',
                            'fibrinogen','inr','pt','ptt','bilirubin_total','bilirubin_direct','icp','crp']
+        self.static_column = ['age_score','myocardial_infarct','congestive_heart_failure','peripheral_vascular_disease',
+                              'cerebrovascular_disease','dementia','chronic_pulmonary_disease','rheumatic_disease',
+                              'peptic_ulcer_disease','mild_liver_disease','diabetes_without_cc','diabetes_with_cc',
+                              'paraplegia','renal_disease','malignant_cancer','severe_liver_disease','metastatic_solid_tumor',
+                              'aids','gender']
         self.vital_index = np.array([4, 5, 6, 7, 8, 9, 10, 11, 13])
+        self.static_index = np.array([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21])
         #self.lab_index = np.array([np.where(np.array(self.lab_column) == i)[0][0] for i in self.lab_column])
+        #self.static_index = np.array([np.where(np.array(self.static_column) == i)[0][0] for i in self.lab_column])
         self.mean_vital = np.array([83.835,120.927,65.337,79.980,19.111,36.795,96.531,136.453,14.604])
         self.std_vital = np.array([14.584,16.512,11.172,11.189,3.538,0.369,1.896,40.488,0.898])
 
@@ -87,13 +98,19 @@ class read_data_mimic():
         sort_index_lab = np.argsort(self.lab_table[:, 5])
         self.lab_table = self.lab_table[sort_index_lab]
         self.static_table = np.array(pd.read_csv(self.file_path_static + name))
+        if self.static_table[0,21] == 'M':
+            self.static_table[0,21] = 1
+        else:
+            self.static_table[0,21] = 0
 
     def return_data_dynamic(self,name):
         """
         return 3 tensor data
         """
+        name = name+".csv"
         self.read_table(name)
         self.one_data_tensor = np.zeros((1,self.time_sequence,self.vital_length+self.lab_length))
+        self.one_data_tensor_static = self.static_table[0,self.static_index]
         if 1 in self.vital_table[:,-1]:
             self.logit_label = 1
             index_onset = np.where(self.vital_table[:,-1]==1)[0][0]
@@ -225,7 +242,7 @@ class read_data_mimic():
     def split_train_test(self):
         self.train_num = np.int(np.floor(self.data_length * self.train_percent))
         self.train_set = self.file_names_vital[0:self.train_num]
-        self.test_set = self.file_names_vital[self.train_num:]
+        self.test_set = self.file_names_vital[self.train_num:-1]
 
 
     """
@@ -258,5 +275,6 @@ if __name__ == "__main__":
     read_d_mimic = read_data_mimic()
     read_d_mimic.split_train_test()
     tb = tradition_b(read_d_mimic)
+    dp = dp_appro(read_d_mimic)
     #read_d_mimic.split_train_test()
     #h_cl = hier_cl(read_d_mimic)

@@ -27,37 +27,41 @@ class tradition_b():
         self.batch_size = 512
         self.vital_length = 9
         self.lab_length = 25
+        self.static_length = 19
         self.epoch = 6
-        self.lr = SGDClassifier(loss="log")
-        self.rf = RandomForestClassifier(max_depth=10,random_state=0)
+        self.lr = LogisticRegression(random_state=0)
+        self.rf = RandomForestClassifier(max_depth=100,random_state=0)
 
     def aquire_batch_data(self, starting_index, data_set,length):
-        self.one_batch_data = np.zeros((length,self.vital_length+self.lab_length))
+        self.one_batch_data = np.zeros((length,self.vital_length+self.lab_length+self.static_length))
         self.one_batch_logit = np.zeros(length)
         for i in range(length):
             name = data_set[starting_index+i]
             self.read_d.return_data_dynamic(name)
             one_data = self.read_d.one_data_tensor
-            self.one_batch_data[i,:] = np.sum(one_data,1)
+            one_data[one_data==0]=np.nan
+            one_data = np.nan_to_num(np.nanmean(one_data,1))
+            self.one_batch_data[i,0:self.vital_length+self.lab_length] = one_data
+            self.one_batch_data[i,self.vital_length+self.lab_length:] = self.read_d.one_data_tensor_static
             self.one_batch_logit[i] = self.read_d.logit_label
 
 
     def logistic_regression(self):
-        self.iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
-        for i in range(self.epoch):
-            for j in range(self.iteration):
-                print(j)
-                self.aquire_batch_data(j*self.iteration,self.train_data,self.batch_size)
-                self.lr.partial_fit(self.one_batch_data,self.one_batch_logit,classes=np.unique(self.one_batch_logit))
+        #self.iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
+        #for i in range(self.epoch):
+            #for j in range(self.iteration):
+                #print(j)
+        self.aquire_batch_data(0,self.train_data,self.batch_size*20)
+        self.lr.fit(self.one_batch_data,self.one_batch_logit)
                 #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
                 #print(roc_auc_score(self.one_batch_logit,self.lr.predict_proba(self.one_batch_data)[:,1]))
 
-            self.test_logistic_regression()
+        self.test_logistic_regression()
 
     def test_logistic_regression(self):
         self.aquire_batch_data(0,self.test_data,self.length_test)
         #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-        print(roc_auc_score(self.one_batch_logit, self.lr.predict_proba(self.one_batch_data)[:, 1]))
+        print(roc_auc_score(self.one_batch_logit, self.lr.predict_proba(self.one_batch_data)[:,1]))
 
 
     def random_forest(self):
