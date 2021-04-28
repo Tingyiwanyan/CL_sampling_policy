@@ -15,7 +15,7 @@ import numpy as np
 
 class tradition_b():
     """
-    Create dynamic HGM model
+    Create tradition model
     """
 
     def __init__(self, read_d):

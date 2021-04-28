@@ -54,7 +54,7 @@ class dp_appro():
                                                    kernel_initializer=tf.keras.initializers.he_normal(seed=None),
                                                    activation=tf.nn.sigmoid)
 
-        self.Dense_patient_time = self.sequence1
+        self.Dense_patient_time = tf.expand_dims(self.sequence1,2)
 
     def self_contrast_t(self):
         """
@@ -63,12 +63,12 @@ class dp_appro():
         """
         positive inner product
         """
-        self.positive_broad_time = tf.broadcast_to(self.x_origin_time,
+        self.positive_broad_time = tf.broadcast_to(self.Dense_patient_time,
                                                    [self.batch_size, self.time_sequence, self.positive_sample_size,
-                                                    self.input_size])
-        self.negative_broad_time = tf.broadcast_to(self.x_origin_time,
+                                                    self.latent_dim])
+        self.negative_broad_time = tf.broadcast_to(self.Dense_patient_time,
                                                    [self.batch_size, self.time_sequence, self.negative_sample_size,
-                                                    self.input_size])
+                                                    self.latent_dim])
 
         self.positive_broad_norm_time = tf.math.l2_normalize(self.positive_broad_time, axis=3)
         self.positive_sample_norm_time = tf.math.l2_normalize(self.x_skip_contrast_time, axis=3)
