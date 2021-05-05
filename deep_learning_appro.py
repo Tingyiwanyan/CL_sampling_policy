@@ -22,7 +22,7 @@ class dp_appro():
         self.length_train = len(self.train_data)
         self.length_test = len(self.test_data)
         self.time_sequence = self.read_d.time_sequence
-        self.batch_size = 512
+        self.batch_size = 256
         self.vital_length = 9
         self.lab_length = 25
         self.latent_dim = 50
@@ -44,7 +44,7 @@ class dp_appro():
         self.input_y_logit = tf.keras.backend.placeholder([None, 1])
         self.input_x = tf.keras.backend.placeholder(
             [None, self.time_sequence, 1 + self.positive_sample_size + self.negative_sample_size,
-             self.vital_length+self.lab_length])
+             self.vital_length + self.lab_length])
 
         # self.input_x_demo = tf.concat([self.input_x_demo_,self.input_x_com],2)
         self.init_forget_gate = tf.keras.initializers.he_normal(seed=None)
@@ -100,6 +100,30 @@ class dp_appro():
         self.hidden_rep = tf.concat(hidden_rep, 1)
         self.hidden_global_vital = tf.reduce_mean(self.hidden_rep, 1)
         self.check = concat_cur
+
+    def deep_layers(self):
+        """
+        create deep learning architecture
+        """
+        self.input_y_logit = tf.keras.backend.placeholder(
+            [None, 1])
+        self.input_x = tf.keras.backend.placeholder(
+            [None, self.time_sequence, self.vital_length + self.lab_length])
+        self.input_x_static = tf.keras.backend.placeholder(
+            [None, self.static_length])
+        self.embed_static = tf.compat.v1.layers.dense(inputs=self.input_x_static,
+                                                      units=self.latent_dim,
+                                                      kernel_initializer=tf.keras.initializers.he_normal(seed=None),
+                                                      activation=tf.nn.sigmoid)
+        self.lstm_layer1 = tf.keras.layers.LSTM(self.latent_dim, return_sequences=True, return_state=True)
+        self.sequence1, self.last_h1, self.last_c1 = self.lstm_layer1(self.input_x)
+        self.embedding = tf.concat([self.last_h1, self.input_x_static], axis=1)
+        self.logit_sig = tf.compat.v1.layers.dense(inputs=self.last_h1,
+                                                   units=1,
+                                                   kernel_initializer=tf.keras.initializers.he_normal(seed=None),
+                                                   activation=tf.nn.sigmoid)
+
+        self.Dense_patient_time = tf.expand_dims(self.sequence1, 2)
 
     def build_dhgm_model(self):
         """
@@ -264,11 +288,12 @@ class dp_appro():
 
     def config_model(self):
         self.lstm_cell()
+        #self.deep_layers()
         self.build_dhgm_model()
         #self.get_latent_rep_hetero_time()
         self.get_latent_rep_hetero()
         #self.contrastive_learning_time()
-        self.contrastive_loss()
+        #self.contrastive_loss()
         bce = tf.keras.losses.BinaryCrossentropy()
         self.logit_sig = tf.compat.v1.layers.dense(inputs=self.x_origin_ce,
                                                    units=1,
@@ -276,7 +301,7 @@ class dp_appro():
                                                    activation=tf.nn.sigmoid)
         self.cross_entropy = bce(self.logit_sig, self.input_y_logit)
         self.train_step_ce = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.cross_entropy)
-        self.train_step_cl = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.log_normalized_prob)
+        #self.train_step_cl = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.log_normalized_prob)
         """
         focal loss
         """
@@ -427,6 +452,7 @@ class dp_appro():
                                                                   self.init_hiddenstate: init_hidden_state})
                                                                   #self.input_x_static: self.one_batch_data_static})
         print(roc_auc_score(self.one_batch_logit, self.out_logit))
+
 
 
 

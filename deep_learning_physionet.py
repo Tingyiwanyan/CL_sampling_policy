@@ -25,7 +25,7 @@ class tradition_b():
         self.length_train = len(self.train_data)
         self.length_test = len(self.test_data)
         self.batch_size = 256
-        self.vital_length = 9
+        self.vital_length = 7
         self.lab_length = 25
         self.static_length = 19
         self.epoch = 6
@@ -35,7 +35,7 @@ class tradition_b():
         self.rf = RandomForestClassifier(max_depth=100,random_state=0)
 
     def aquire_batch_data(self, starting_index, data_set,length):
-        self.one_batch_data = np.zeros((length,self.vital_length+self.lab_length))#+self.static_length))
+        self.one_batch_data = np.zeros((length,self.vital_length))#+self.static_length))
         self.one_batch_logit = np.zeros(length)
         self.one_batch_logit_dp = np.zeros((length,1))
         for i in range(length):
@@ -49,6 +49,30 @@ class tradition_b():
             #self.one_batch_data[i,self.vital_length+self.lab_length:] = self.read_d.one_data_tensor_static
             self.one_batch_logit[i] = self.read_d.logit_label
             self.one_batch_logit_dp[i,0] = self.read_d.logit_label
+
+    def assign_patient_value_physionet(self,center_node_index,label):
+        one_sample = np.zeros((self.time_sequence,self.vital_length))
+        one_sample_single = np.zeros(self.item_size)
+        name = self.read_d.file_path+center_node_index
+        table = np.array(pd.read_table(name,sep="|"))
+        if label == 1:
+            time_sepsis = np.where(table[:,40]==1)[0][0]
+        else:
+            length_of_stay = table.shape[0]
+            time_sepsis = np.int(np.floor(np.random.uniform(self.time_sequence-1, length_of_stay, 1)))
+        for i in range(self.time_sequence):
+            row_index = time_sepsis+i+1-self.time_sequence
+            row_value = table[row_index,:]
+            for j in range(self.item_size):
+                mean = self.read_d.median_vital_signal[j]
+                std = self.read_d.std_vital_signal[j]
+                if np.isnan(row_value[j]):
+                    row_value[j] = 0
+                value = (row_value[j] - mean)/std
+                one_sample_single[j] = value
+            one_sample[i,:] = one_sample_single
+
+        return one_sample
 
     def MLP_config(self):
         self.input_y_logit = tf.keras.backend.placeholder(
@@ -126,19 +150,3 @@ class tradition_b():
         self.aquire_batch_data(0,self.test_data,self.length_test)
         #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
         print(roc_auc_score(self.one_batch_logit, self.lr.predict_proba(self.one_batch_data)[:,1]))
-
-
-    def random_forest(self):
-        self.aquire_batch_data(0, self.train_data, 3000)
-        self.rf.fit(self.one_batch_data, self.one_batch_logit)
-                # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-                # print(roc_auc_score(self.one_batch_logit,self.lr.predict_proba(self.one_batch_data)[:,1]))
-
-        self.test_random_forest()
-
-    def test_random_forest(self):
-        self.aquire_batch_data(0,self.test_data,self.length_test)
-        #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-        print(roc_auc_score(self.one_batch_logit, self.rf.predict(self.one_batch_data)))
-
-

@@ -6,13 +6,14 @@ import pandas as pd
 import json
 from os import listdir
 from cl_learning import knn_cl
+from deep_learning_physionet import tradition_b
 
 class read_data():
     """
     Loading data
     """
     def __init__(self):
-        self.file_path = '/home/tingyi/adver_cl/training/'
+        self.file_path = '/home/tingyi/physionet_data/training_setA/training'
         self.file_names = listdir(self.file_path)
         self.train_prop = 0.7
         self.test_prop = 0.3
@@ -81,6 +82,7 @@ class read_data():
                     self.dic_item_sepsis.setdefault(j,[]).append(entry_mean)
                 else:
                     self.dic_item_non_sepsis.setdefault(j, []).append(entry_mean)
+
 
 
             count += 1
