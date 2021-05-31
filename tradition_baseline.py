@@ -20,35 +20,59 @@ class tradition_b():
 
     def __init__(self, read_d):
         self.read_d = read_d
-        self.train_data = read_d.train_set
-        self.test_data = read_d.test_set
-        self.length_train = len(self.train_data)
-        self.length_test = len(self.test_data)
-        self.batch_size = 256
-        self.vital_length = 9
-        self.lab_length = 25
-        self.static_length = 19
-        self.epoch = 6
+        #self.train_data = read_d.train_set
+        #self.test_data = read_d.test_set
+        #self.length_train = len(self.train_data)
+        #self.length_test = len(self.test_data)
+        self.train_data_cohort = read_d.file_names_cohort[0:500]
+        self.train_data_control = read_d.file_names_control[0:2000]
+        self.test_data_cohort = read_d.file_names_cohort[500:700]
+        self.test_data_control = read_d.file_names_control[2000:3000]
+        self.batch_size = 32
+        self.vital_length = 8
+        self.lab_length = 19
+        self.blood_length = 27
+        self.epoch = 2
         self.gamma = 2
         self.tau = 1
         self.lr = LogisticRegression(random_state=0)
         self.rf = RandomForestClassifier(max_depth=100,random_state=0)
 
-    def aquire_batch_data(self, starting_index, data_set,length):
-        self.one_batch_data = np.zeros((length,self.vital_length+self.lab_length))#+self.static_length))
-        self.one_batch_logit = np.zeros(length)
+    def aquire_batch_data_cohort(self, starting_index, data_set,length):
+        self.one_batch_data_cohort = np.zeros((length,self.vital_length+self.lab_length+self.blood_length))#+self.static_length))
+        self.one_batch_logit_cohort = list(np.ones(length))
         self.one_batch_logit_dp = np.zeros((length,1))
         for i in range(length):
             name = data_set[starting_index+i]
-            self.read_d.return_data_dynamic(name)
+            self.read_d.return_data_dynamic_cohort(name)
             one_data = self.read_d.one_data_tensor
             #one_data[one_data==0]=np.nan
             #one_data = np.nan_to_num(np.nanmean(one_data,0))
             one_data = np.mean(one_data,0)
-            self.one_batch_data[i,:] = one_data
+            self.one_batch_data_cohort[i,:] = one_data
             #self.one_batch_data[i,self.vital_length+self.lab_length:] = self.read_d.one_data_tensor_static
-            self.one_batch_logit[i] = self.read_d.logit_label
-            self.one_batch_logit_dp[i,0] = self.read_d.logit_label
+            #self.one_batch_logit[i] = self.read_d.logit_label
+            #self.one_batch_logit_dp[i,0] = self.read_d.logit_label
+
+    def aquire_batch_data_control(self, starting_index, data_set,length):
+        self.one_batch_data_control = np.zeros((length,self.vital_length+self.lab_length+self.blood_length))#+self.static_length))
+        self.one_batch_logit_control = list(np.zeros(length))
+        self.one_batch_logit_dp = np.zeros((length,1))
+        for i in range(length):
+            name = data_set[starting_index+i]
+            self.read_d.return_data_dynamic_control(name)
+            one_data = self.read_d.one_data_tensor
+            #one_data[one_data==0]=np.nan
+            #one_data = np.nan_to_num(np.nanmean(one_data,0))
+            one_data = np.mean(one_data,0)
+            self.one_batch_data_control[i,:] = one_data
+            #self.one_batch_data[i,self.vital_length+self.lab_length:] = self.read_d.one_data_tensor_static
+            #self.one_batch_logit[i] = self.read_d.logit_label
+            #self.one_batch_logit_dp[i,0] = self.read_d.logit_label
+
+    def aquire_batch_data_whole(self):
+        self.one_batch_data_whole = np.concatenate((self.one_batch_data_cohort,self.one_batch_data_control),axis=0)
+        self.one_batch_logit_whole = self.one_batch_logit_cohort + self.one_batch_logit_control
 
     def MLP_config(self):
         self.input_y_logit = tf.keras.backend.placeholder(
@@ -115,17 +139,22 @@ class tradition_b():
         #for i in range(self.epoch):
             #for j in range(self.iteration):
                 #print(j)
-        self.aquire_batch_data(0,self.train_data,3000)#self.batch_size*10)
-        self.lr.fit(self.one_batch_data,self.one_batch_logit)
+        self.aquire_batch_data_cohort(0,self.train_data_cohort,len(self.train_data_cohort))
+        self.aquire_batch_data_control(0,self.train_data_control,len(self.train_data_control))
+        self.aquire_batch_data_whole()
+        self.lr.fit(self.one_batch_data_whole,self.one_batch_logit_whole)
                 #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
                 #print(roc_auc_score(self.one_batch_logit,self.lr.predict_proba(self.one_batch_data)[:,1]))
 
         self.test_logistic_regression()
 
     def test_logistic_regression(self):
-        self.aquire_batch_data(0,self.test_data,self.length_test)
+        #self.aquire_batch_data(0,self.test_data,self.length_test)
+        self.aquire_batch_data_cohort(0, self.test_data_cohort, len(self.test_data_cohort))
+        self.aquire_batch_data_control(0, self.test_data_control, len(self.test_data_control))
+        self.aquire_batch_data_whole()
         #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-        print(roc_auc_score(self.one_batch_logit, self.lr.predict_proba(self.one_batch_data)[:,1]))
+        print(roc_auc_score(self.one_batch_logit_whole, self.lr.predict_proba(self.one_batch_data_whole)[:,1]))
 
 
     def random_forest(self):

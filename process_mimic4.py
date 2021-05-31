@@ -27,7 +27,8 @@ class read_data_mimic():
         self.lab_duration = 8
         self.cost_upper_lab = 97
         self.cost_lower_lab = 3
-        self.time_sequence = 12
+        self.time_sequence = 6
+        self.time_period = 2
         self.predict_window = 1
         self.lab_length = 25
         self.vital_length = 9
@@ -47,6 +48,24 @@ class read_data_mimic():
         #self.static_index = np.array([np.where(np.array(self.static_column) == i)[0][0] for i in self.lab_column])
         self.mean_vital = np.array([83.835,120.927,65.337,79.980,19.111,36.795,96.531,136.453,14.604])
         self.std_vital = np.array([14.584,16.512,11.172,11.189,3.538,0.369,1.896,40.488,0.898])
+
+        self.mean_vital_sepsis = np.array([ 86.08954386, 120.36944182,  64.21252055,  79.22208434,
+        19.81800493,  36.89064371,  96.61515062, 139.68272161,
+        14.53801692])
+        self.std_vital_sepsis = np.array([14.48041867, 15.82926349, 10.13032161, 10.21194978,  3.67921703,
+        0.41006641,  1.76943325, 42.24662342,  0.78294282])
+
+        self.mean_vital_non_sepsis = np.array([ 83.24974952, 120.70828108,  65.31851332,  79.88063447,
+        18.87963133,  36.78118213,  96.59653329, 135.0127424 ,
+        14.42747459])
+
+        self.std_vital_non_sepsis = np.array([12.45971733, 14.21109501,  9.5708894 ,  9.63744889,  2.89289498,
+        0.26896917,  1.49430216, 35.18203474,  0.56789773])
+
+
+
+
+
 
         self.lab_index = np.array([6,  7,  8,  9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
        24, 25, 26, 27, 28, 29, 30, 31])
@@ -71,6 +90,35 @@ class read_data_mimic():
         3.86478997e+00, 1.54477684e+02, 4.16272930e-01, 4.35450923e+00,
         1.21782725e+01, 1.20603519e+00, 2.52391963e+00, 4.71132448e+00,
         6.66320905e+01]
+        self.mean_lab_sepsis = [ 25.22115894,  24.74138922,   8.39614553, 102.76605686,
+         1.19020701, 138.53710294,   4.0910668 ,  92.37692308,
+        43.75897436, 200.75945546,   7.38807692,   0.86979167,
+         2.75      ,  30.34156647,   9.88529645, 225.20047885,
+        10.80832952, 383.26073524,   1.44092612,  15.56869941,
+        36.48630928,   1.08101355,   2.49340739,   9.89717608,
+        79.99021739]
+        self.std_lab_sepsis = [3.69035029e+00, 1.44956778e+01, 5.28854219e-01, 4.75431834e+00,
+       8.50223016e-01, 3.43257760e+00, 3.62942342e-01, 5.32796707e+01,
+       8.33359132e+00, 1.07608985e+02, 7.67798667e-02, 4.17774244e+00,
+       1.98636802e+00, 4.42109089e+00, 1.51838791e+00, 9.66905760e+01,
+       4.31488748e+00, 1.81495265e+02, 4.56183625e-01, 4.71543501e+00,
+       1.20801138e+01, 1.16865701e+00, 2.82799067e+00, 5.06868284e+00,
+       6.64710098e+01]
+        self.mean_lab_non_sepsis = [ 24.61890649,  23.54881413,   8.50531496, 102.72848335,
+         1.23352196, 138.24846031,   4.11834643, 114.59923664,
+        43.13461538, 250.45185636,   7.36221374,  -0.77480916,
+         1.83445946,  31.50838301,  10.33528672, 217.48669809,
+         9.86380179, 333.40847041,   1.35289692,  14.8443011 ,
+        35.06088574,   1.06186957,   2.08902857,   9.92948718,
+        65.8563119 ]
+        self.std_lab_non_sepsis = [3.30906670e+00, 1.51482100e+01, 5.30955686e-01, 4.68386598e+00,
+       9.50430453e-01, 3.39100134e+00, 4.05617140e-01, 7.40406691e+01,
+       8.07198109e+00, 1.25380546e+02, 7.51516541e-02, 3.94437165e+00,
+       9.86357128e-01, 5.01508429e+00, 1.74956117e+00, 8.59265124e+01,
+       3.77418694e+00, 1.45916491e+02, 4.10977267e-01, 4.28488527e+00,
+       1.21833512e+01, 1.21633321e+00, 2.34702091e+00, 3.85976757e+00,
+       6.56996130e+01]
+
         self.upper_lab = [ 32.4,  67.0        ,   9.51088889, 111.47333333,
          4.6       , 144.86791667,   5.05      , 338.9       ,
         64.        , 482.85714286,   7.5245    ,  10.        ,
@@ -113,10 +161,10 @@ class read_data_mimic():
         self.one_data_tensor_static = self.static_table[0,self.static_index]
         if 1 in self.vital_table[:,-1]:
             self.logit_label = 1
-            index_onset = np.where(self.vital_table[:,-1]==1)[0][0]
+            index_onset = np.where(self.vital_table[:,-1]==1)[0][-1]
             self.hr_onset = self.vital_table[index_onset][1]
             self.predict_window_start = self.hr_onset-self.predict_window
-            self.observation_window_start = self.predict_window_start-self.time_sequence
+            self.observation_window_start = self.predict_window_start-(self.time_sequence*self.time_period)
             self.assign_value_vital_time()
             self.one_data_tensor[:,0:self.vital_length] = self.one_data_vital
             self.assign_value_lab_time()
@@ -124,12 +172,12 @@ class read_data_mimic():
         else:
             self.logit_label = 0
             length = self.vital_table.shape[0]
-            if length > self.time_sequence + self.predict_window:
-                self.hr_onset = np.int(np.floor(np.random.uniform(self.time_sequence+self.predict_window, length, 1)))
+            if length > self.time_sequence*self.time_period + self.predict_window:
+                self.hr_onset = np.int(np.floor(np.random.uniform(self.time_sequence*self.time_period+self.predict_window, length, 1)))
             else:
                 self.hr_onset = length
             self.predict_window_start = self.hr_onset - self.predict_window
-            self.observation_window_start = self.predict_window_start - self.time_sequence
+            self.observation_window_start = self.predict_window_start - self.time_sequence*self.time_period
             self.assign_value_vital_time()
             self.one_data_tensor[:, 0:self.vital_length] = self.one_data_vital
             self.assign_value_lab_time()
@@ -139,44 +187,53 @@ class read_data_mimic():
     def assign_value_vital_time(self):
         self.one_data_vital = np.zeros((self.time_sequence,self.vital_length))
         for i in range(self.time_sequence):
-            self.hr_current = self.observation_window_start + i
-            if self.hr_current in self.vital_table[:,1]:
-                hr_index = np.where(self.vital_table[:,1]==self.hr_current)[0][0]
-                self.one_data_vital[i,:] = self.assign_value_vital_single(hr_index)
+            self.one_data_count_vital = np.zeros(self.vital_length)
+            self.hr_current = self.observation_window_start + i*self.time_period
+            for j in range(self.time_period):
+                if self.hr_current+j in self.vital_table[:,1]:
+                    hr_index = np.where(self.vital_table[:,1]==self.hr_current+j)[0][0]
+                    self.one_data_vital[i,:] = self.one_data_vital[i,:] + self.assign_value_vital_single(hr_index)
+            self.one_data_vital[i,:] = self.one_data_vital[i,:]/self.time_period
+            #for l in range(self.vital_length):
+               # if self.one_data_count_vital[l] == 0:
+                   # self.one_data_count_vital[l] = 1
+            #self.one_data_vital[i,:] = self.one_data_vital[i,:]/self.one_data_count_vital
 
-        self.one_data_count_vital_ = np.zeros(self.vital_length)
+        """
+        self.one_data_count_vital_ =np.zeros(self.vital_length)
         for i in range(self.time_sequence):
             for l in range(self.vital_length):
-                if not self.one_data_vital[i, l] == 0:
+                if not self.one_data_vital[i,l] == 0:
                     self.one_data_count_vital_[l] += 1
 
         for l in range(self.vital_length):
             if self.one_data_count_vital_[l] == 0:
                 self.one_data_count_vital_[l] = 1
 
-        self.one_mean_vital = np.sum(self.one_data_vital, axis=0) / self.one_data_count_vital_
+        self.one_mean_vital = np.sum(self.one_data_vital,axis=0)/self.one_data_count_vital_
+        """
 
         for i in range(self.time_sequence):
             for k in range(self.vital_length):
-                if self.one_data_vital[i, k] == 0:
+                if self.one_data_vital[i, k] == 0.0:
                     if i == 0:
                         # continue
-                        if not self.one_data_vital[i+1,k] == 0:
-                            self.one_data_vital[i, k] = self.one_data_vital[i+1,k]#self.one_mean_vital[
-                                #k]  # (self.one_mean_vital[k]-self.mean_vital[k])/self.std_vital[k]
+                        if not self.one_data_vital[i + 1, k] == 0:
+                            self.one_data_vital[i, k] = self.one_data_vital[i + 1, k]  # self.one_mean_vital[
+                            # k]  # (self.one_mean_vital[k]-self.mean_vital[k])/self.std_vital[k]
                         else:
                             self.one_data_vital[i, k] = 0
                         # if 1 in self.vital_table[:, -1]:
                         # self.one_data_vital[i,k] = self.mean_vital_sepsis[k]
                         # else:
                         # self.one_data_vital[i,k] = self.mean_vital_non_sepsis[k]
-                    elif i<self.time_sequence-1:
-                        if not self.one_data_vital[i-1,k] == 0:
+                    elif i < self.time_sequence - 1:
+                        if not self.one_data_vital[i - 1, k] == 0:
                             self.one_data_vital[i, k] = self.one_data_vital[i - 1, k]
-                        elif not self.one_data_vital[i+1,k] == 0:
+                        elif not self.one_data_vital[i + 1, k] == 0:
                             self.one_data_vital[i, k] = self.one_data_vital[i + 1, k]
                     else:
-                        if not self.one_data_vital[i-1,k] == 0:
+                        if not self.one_data_vital[i - 1, k] == 0:
                             self.one_data_vital[i, k] = self.one_data_vital[i - 1, k]
 
 
@@ -190,7 +247,10 @@ class read_data_mimic():
             if np.isnan(value):
                 z_score = 0
             else:
-                z_score = (value-self.mean_vital[i])/self.std_vital[i]
+                if value < self.mean_vital[i] + 2*self.std_vital[i] and value > self.mean_vital[i] - 2*self.std_vital[i]:
+                    z_score = (value-self.mean_vital[i])/self.std_vital[i]
+                else:
+                    z_score = 0
             one_vital_sample[i] = z_score
 
         return one_vital_sample
@@ -198,7 +258,7 @@ class read_data_mimic():
     def assign_value_lab_time(self):
         self.one_data_lab = np.zeros((self.time_sequence, self.lab_length))
         for i in range(self.time_sequence):
-            self.hr_current = self.observation_window_start + i
+            self.hr_current = self.observation_window_start + i*self.time_period
             self.lab_chartime = self.lab_table[:,5]
             try:
                 hr_index = np.where((self.lab_chartime>self.hr_current-self.lab_duration)&(self.lab_chartime<self.hr_current+1))[0][0]
@@ -208,26 +268,26 @@ class read_data_mimic():
 
         for i in range(self.time_sequence):
             for k in range(self.lab_length):
-             if self.one_data_lab[i, k] == 0:
-                 if i == 0:
-                     # continue
-                     if not self.one_data_lab[i+1,k] == 0:
-                         self.one_data_lab[i, k] = self.one_data_lab[i+1,k]#self.one_mean_vital[
-                             #k]  # (self.one_mean_vital[k]-self.mean_vital[k])/self.std_vital[k]
-                     else:
-                         self.one_data_lab[i, k] = 0
-                     # if 1 in self.vital_table[:, -1]:
-                     # self.one_data_vital[i,k] = self.mean_vital_sepsis[k]
-                     # else:
-                     # self.one_data_vital[i,k] = self.mean_vital_non_sepsis[k]
-                 elif i<self.time_sequence-1:
-                     if not self.one_data_lab[i-1,k] == 0:
-                         self.one_data_lab[i, k] = self.one_data_lab[i - 1, k]
-                     elif not self.one_data_lab[i+1,k] == 0:
-                         self.one_data_lab[i, k] = self.one_data_lab[i + 1, k]
-                 else:
-                     if not self.one_data_lab[i-1,k] == 0:
-                         self.one_data_lab[i, k] = self.one_data_lab[i - 1, k]
+                if self.one_data_lab[i, k] == 0:
+                    if i == 0:
+                        # continue
+                        if not self.one_data_lab[i + 1, k] == 0:
+                            self.one_data_lab[i, k] = self.one_data_lab[i + 1, k]  # self.one_mean_vital[
+                            # k]  # (self.one_mean_vital[k]-self.mean_vital[k])/self.std_vital[k]
+                        else:
+                            self.one_data_lab[i, k] = 0
+                        # if 1 in self.vital_table[:, -1]:
+                        # self.one_data_vital[i,k] = self.mean_vital_sepsis[k]
+                        # else:
+                        # self.one_data_vital[i,k] = self.mean_vital_non_sepsis[k]
+                    elif i < self.time_sequence - 1:
+                        if not self.one_data_lab[i - 1, k] == 0:
+                            self.one_data_lab[i, k] = self.one_data_lab[i - 1, k]
+                        elif not self.one_data_lab[i + 1, k] == 0:
+                            self.one_data_lab[i, k] = self.one_data_lab[i + 1, k]
+                    else:
+                        if not self.one_data_lab[i - 1, k] == 0:
+                            self.one_data_lab[i, k] = self.one_data_lab[i - 1, k]
 
     def assign_value_lab_single(self,hr_index):
         one_lab_sample = np.zeros(self.lab_length)
@@ -237,8 +297,12 @@ class read_data_mimic():
             if np.isnan(value):
                 z_score = 0
             else:
-                z_score = (value-self.mean_lab[i])/self.std_lab[i]
+                if value < self.mean_lab[i] + 2*self.std_lab[i] and value > self.mean_lab[i] - 2*self.std_lab[i]:
+                    z_score = (value-self.mean_lab[i])/ self.std_lab[i]
+                else:
+                    z_score = 0
             one_lab_sample[i] = z_score
+
 
         return one_lab_sample
 
@@ -249,17 +313,42 @@ class read_data_mimic():
         """
         self.vital = {}
         for i in self.file_names_vital:
+            i = i + '.csv'
             try:
                 self.read_table(i)
-                print(i)
-                for j in range(9):
-                    index = self.vital_index[j]
-                    vital_name = self.vital_column[j]
-                    single_mean = np.mean([value for value in self.vital_table[:, index] if not np.isnan(value)])
-                    if not np.isnan(single_mean):
-                        self.vital.setdefault(vital_name, []).append(single_mean)
+                #print(i)
+                if 1 in self.vital_table[:, -1]:
+                    print(i)
+                    for j in range(9):
+                        index = self.vital_index[j]
+                        vital_name = self.vital_column[j]
+                        onset = np.where(self.vital_table[:,-1]==1)[0][0]
+                        single_mean = np.mean([value for value in self.vital_table[onset:, index] if not np.isnan(value)])
+                        if not np.isnan(single_mean):
+                            self.vital.setdefault(vital_name, []).append(single_mean)
             except:
                 continue
+
+
+
+    def compute_mean_std_vital(self):
+        self.vital['mean'] = {}
+        self.vital['std'] = {}
+        self.mean_vital = np.zeros(9)
+        self.std_vital = np.zeros(9)
+        index = 0
+        for i in range(self.vital_length):
+            vital_name = self.vital_column[i]
+            upper_per = np.percentile(self.vital[vital_name], self.cost_upper_lab)
+            lower_per = np.percentile(self.vital[vital_name], self.cost_lower_lab)
+            values = [value for value in self.vital[vital_name] if value < upper_per and value > lower_per]
+            mean = np.mean(values)
+            std = np.std(values)
+            self.vital['mean'][vital_name]=mean
+            self.vital['std'][vital_name]=std
+            self.mean_vital[index] = mean
+            self.std_vital[index] = std
+            index += 1
 
     def construct_lab(self):
         """
@@ -267,15 +356,17 @@ class read_data_mimic():
         """
         self.lab = {}
         for i in self.file_names_vital:
+            i = i + '.csv'
             try:
                 self.read_table(i)
                 print(i)
-                for j in range(25):
-                    index = self.lab_index[j]
-                    lab_name = self.lab_column[j]
-                    single_mean = np.mean([value for value in self.lab_table[:, index] if not np.isnan(value)])
-                    if not np.isnan(single_mean):
-                        self.lab.setdefault(lab_name, []).append(single_mean)
+                if not 1 in self.vital_table[:, -1]:
+                    for j in range(25):
+                        index = self.lab_index[j]
+                        lab_name = self.lab_column[j]
+                        single_mean = np.mean([value for value in self.lab_table[:, index] if not np.isnan(value)])
+                        if not np.isnan(single_mean):
+                            self.lab.setdefault(lab_name, []).append(single_mean)
             except:
                 continue
 
