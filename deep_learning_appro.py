@@ -21,8 +21,8 @@ class dp_appro():
         self.train_data_control = read_d.file_names_control[0:2000]
         self.test_data_cohort = read_d.file_names_cohort[500:700]
         self.test_data_control = read_d.file_names_control[2000:3000]
-        self.length_train = len(self.train_data)
-        self.length_test = len(self.test_data)
+        #self.length_train = len(self.train_data)
+        #self.length_test = len(self.test_data)
         self.time_sequence = self.read_d.time_sequence
         self.batch_size = 32
         self.vital_length = 8

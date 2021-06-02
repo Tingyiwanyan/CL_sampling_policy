@@ -425,7 +425,7 @@ class read_data_mimic():
 if __name__ == "__main__":
     read_d_mimic = read_data_mimic()
     read_d_mimic.split_train_test()
-    tb = tradition_b(read_d_mimic)
+    #tb = tradition_b(read_d_mimic)
     dp = dp_appro(read_d_mimic)
     #read_d_mimic.split_train_test()
     #h_cl = hier_cl(read_d_mimic)

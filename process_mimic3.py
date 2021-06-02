@@ -8,6 +8,7 @@ from os import listdir
 from hierarchy_cl_learning import hier_cl
 from tradition_baseline import tradition_b
 from deep_learning_appro import dp_appro
+from seq_cl import seq_cl
 
 
 class read_data_mimic():
@@ -434,3 +435,4 @@ if __name__ == "__main__":
     #read_d_mimic.split_train_test()
     tb = tradition_b(read_d_mimic)
     #dp = dp_appro(read_d_mimic)
+    seq = seq_cl(read_d_mimic)

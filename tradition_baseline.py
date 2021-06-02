@@ -28,6 +28,8 @@ class tradition_b():
         self.train_data_control = read_d.file_names_control[0:2000]
         self.test_data_cohort = read_d.file_names_cohort[500:700]
         self.test_data_control = read_d.file_names_control[2000:3000]
+        self.train_length_cohort = len(self.train_data_cohort)
+        self.train_length_control = len(self.train_data_control)
         self.batch_size = 32
         self.vital_length = 8
         self.lab_length = 19
