@@ -24,6 +24,8 @@ class read_data_mimic():
         self.file_path_blood_gas_control = '/home/tingyi/m3_data/control_blood_gas/'
         self.file_path_sepsis_cohort = '/home/tingyi/m3_data/sepsis_cohort/'
         self.file_path_sepsis_control = '/home/tingyi/m3_data/sepsis_control/'
+        self.file_path_sofa_6hourly_cohort = '/home/tingyi/m3_data/sofa_6hourly_cohort/'
+        self.file_path_sofa_6hourly_control = '/home/tingyi/m3_data/sofa_6hourly_control/'
         file = open("sepsis_cohort.txt","r")
         self.cohort_names = file.read()
         self.file_names_cohort = self.cohort_names.split("\n") #listdir(self.file_path_vital)

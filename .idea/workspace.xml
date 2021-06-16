@@ -3,10 +3,8 @@
   <component name="ChangeListManager">
     <list default="true" id="31baeeb3-fc4b-473a-a6ed-2bdfec0ffede" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/deep_learning_appro.py" beforeDir="false" afterPath="$PROJECT_DIR$/deep_learning_appro.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/process_mimic3.py" beforeDir="false" afterPath="$PROJECT_DIR$/process_mimic3.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/process_mimic4.py" beforeDir="false" afterPath="$PROJECT_DIR$/process_mimic4.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tradition_baseline.py" beforeDir="false" afterPath="$PROJECT_DIR$/tradition_baseline.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/seq_cl.py" beforeDir="false" afterPath="$PROJECT_DIR$/seq_cl.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
