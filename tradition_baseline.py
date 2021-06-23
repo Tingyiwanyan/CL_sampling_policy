@@ -7,11 +7,19 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import SGDClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
+from sklearn.metrics import average_precision_score
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
 import tensorflow as tf
 import numpy as np
+from sklearn.utils import resample
+import bootstrapped.bootstrap as bs
+import bootstrapped.stats_functions as bs_stats
+from sklearn import svm
+from xgboost import XGBClassifier
+from sklearn.calibration import CalibratedClassifierCV
+import random
 
 class tradition_b():
     """
@@ -24,16 +32,17 @@ class tradition_b():
         #self.test_data = read_d.test_set
         #self.length_train = len(self.train_data)
         #self.length_test = len(self.test_data)
-        self.train_data_cohort = read_d.file_names_cohort[0:500]
-        self.train_data_control = read_d.file_names_control[0:2000]
-        self.test_data_cohort = read_d.file_names_cohort[500:700]
-        self.test_data_control = read_d.file_names_control[2000:3000]
+        self.train_data_cohort = read_d.file_names_cohort[0:1000]
+        self.train_data_control = read_d.file_names_control[0:7000]
+        self.test_data_cohort = read_d.file_names_cohort[1000:1400]
+        self.test_data_control = read_d.file_names_control[7000:10000]
         self.train_length_cohort = len(self.train_data_cohort)
         self.train_length_control = len(self.train_data_control)
         self.batch_size = 32
         self.vital_length = 8
         self.lab_length = 19
         self.blood_length = 27
+        self.boost_iteration = 10
         self.epoch = 2
         self.gamma = 2
         self.tau = 1
@@ -151,6 +160,27 @@ class tradition_b():
         self.test_logistic_regression()
 
     def test_logistic_regression(self):
+        sample_size_cohort = np.int(np.floor(len(self.test_data_cohort) * 4 / 5))
+        sample_size_control = np.int(np.floor(len(self.test_data_control) * 4 / 5))
+        auc = []
+        auprc = []
+        for i in range(self.boost_iteration):
+            test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
+            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            self.aquire_batch_data_cohort(0,test_cohort, len(test_cohort))
+            self.aquire_batch_data_control(0, test_control, len(test_control))
+            self.aquire_batch_data_whole()
+            # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+            auc.append(roc_auc_score(self.one_batch_logit_whole, self.lr.predict_proba(self.one_batch_data_whole)[:,1]))
+            auprc.append(average_precision_score(self.one_batch_logit_whole,
+                                                 self.lr.predict_proba(self.one_batch_data_whole)[:,1]))
+
+        print("auc")
+        print(bs.bootstrap(np.array(auc), stat_func=bs_stats.mean))
+        print("auprc")
+        print(bs.bootstrap(np.array(auprc), stat_func=bs_stats.mean))
+
+    def test_logistic_regression_whole(self):
         #self.aquire_batch_data(0,self.test_data,self.length_test)
         self.aquire_batch_data_cohort(0, self.test_data_cohort, len(self.test_data_cohort))
         self.aquire_batch_data_control(0, self.test_data_control, len(self.test_data_control))
@@ -167,7 +197,7 @@ class tradition_b():
 
         self.test_random_forest()
 
-    def test_random_forest(self):
+    def test_random_forest_whole(self):
         self.aquire_batch_data(0,self.test_data,self.length_test)
         #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
         print(roc_auc_score(self.one_batch_logit, self.rf.predict(self.one_batch_data)))

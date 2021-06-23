@@ -16,12 +16,12 @@ class seq_cl():
     """
     def __init__(self, read_d):
         self.read_d = read_d
-        self.train_data_cohort = read_d.file_names_cohort[0:1000]
-        self.train_data_control = read_d.file_names_control[0:7000]
-        self.test_data_cohort = read_d.file_names_cohort[1000:1400]
-        self.test_data_control = read_d.file_names_control[7000:14000]
-        self.train_data_cohort_mem = read_d.file_names_cohort[0:400]
-        self.train_data_control_mem = read_d.file_names_control[0:2000]
+        self.train_data_cohort = read_d.file_names_cohort[0:500]
+        self.train_data_control = read_d.file_names_control[0:3000]
+        self.test_data_cohort = read_d.file_names_cohort[500:700]
+        self.test_data_control = read_d.file_names_control[3000:3500]
+        self.train_data_cohort_mem = read_d.file_names_cohort[0:500]
+        self.train_data_control_mem = read_d.file_names_control[0:3000]
         #self.train_data_cohort = self.train_data_cohort_mem
         #self.train_data_control = self.train_data_control_mem
         self.train_length_cohort_mem = len(self.train_data_cohort_mem)
@@ -38,6 +38,7 @@ class seq_cl():
         self.lab_length = 19
         self.blood_length = 27
         self.epoch = 2
+        self.epoch_pre = 2
         self.gamma = 2
         self.tau = 1
         self.latent_dim = 100
@@ -90,7 +91,7 @@ class seq_cl():
         # self.norm_knn = np.expand_dims(np.linalg.norm(self.knn_sim_matrix, axis=1), 1)
         # self.knn_sim_matrix = self.knn_sim_matrix / self.norm_knn
         # self.knn_sim_score_matrix = np.matmul(self.knn_sim_matrix[:,0:8], self.knn_sim_matrix[:,0:8].T)
-        self.knn_nbrs = NearestNeighbors(n_neighbors=self.train_length_cohort_mem, algorithm='ball_tree').fit(
+        self.knn_nbrs = NearestNeighbors(n_neighbors=self.train_length_cohort_mem, algorithm='auto',metric='euclidean').fit(
             self.knn_sim_matrix[:, :])
         distance, indices = self.knn_nbrs.kneighbors(self.knn_sim_matrix[:, :])
         for i in range(self.train_length_cohort_mem):
@@ -154,7 +155,7 @@ class seq_cl():
         # self.norm_knn = np.expand_dims(np.linalg.norm(self.knn_sim_matrix, axis=1), 1)
         # self.knn_sim_matrix = self.knn_sim_matrix / self.norm_knn
         # self.knn_sim_score_matrix = np.matmul(self.knn_sim_matrix[:,0:8], self.knn_sim_matrix[:,0:8].T)
-        self.knn_nbrs = NearestNeighbors(n_neighbors=self.train_length_control_mem, algorithm='ball_tree').fit(
+        self.knn_nbrs = NearestNeighbors(n_neighbors=self.train_length_control_mem, algorithm='auto',metric='euclidean').fit(
             self.knn_sim_matrix[:, :])
         distance, indices = self.knn_nbrs.kneighbors(self.knn_sim_matrix[:, :])
         for i in range(self.train_length_control_mem):
@@ -246,10 +247,47 @@ class seq_cl():
                                                                                 self.time_sequence,
                                                                                 self.latent_dim])
 
+
+    def LSTM_layers_stack(self, whole_seq_input, seq_input_pos, seq_input_neg, output_dim):
+        lstm = tf.keras.layers.LSTM(output_dim, return_sequences=True, return_state=True)
+
+        #whole_seq_output,final_memory_state,final_carry_state = lstm(whole_seq_input_act)
+        dense = tf.keras.layers.Dense(output_dim, activation=tf.nn.relu,
+                                      kernel_initializer=tf.keras.initializers.he_normal(seed=None),
+                                      kernel_regularizer=tf.keras.regularizers.l1(0.01),
+                                      activity_regularizer=tf.keras.regularizers.l2(0.01)
+                                      )
+        layer = tf.keras.layers.Dropout(.2, input_shape=(output_dim,))
+        BN = tf.keras.layers.BatchNormalization()
+
+        whole_seq_output_ = dense(whole_seq_input)
+        whole_seq_output_bn = BN(whole_seq_output_)
+        whole_seq_output_act = layer(whole_seq_output_bn)
+
+        whole_seq_output, final_memory_state, final_carry_state = lstm(whole_seq_output_act)
+
+        """
+        positive sample
+        """
+        whole_seq_output_pos_ = dense(seq_input_pos)
+        whole_seq_output_pos_bn = BN(whole_seq_output_pos_)
+        whole_seq_output_pos_act = layer(whole_seq_output_pos_bn)
+        whole_seq_output_pos, final_memory_state_pos, final_carry_state_pos = lstm(whole_seq_output_pos_act)
+
+        """
+        negative sample
+        """
+        whole_seq_output_neg_= dense(seq_input_neg)
+        whole_seq_output_neg_bn = BN(whole_seq_output_neg_)
+        whole_seq_output_neg_act = layer(whole_seq_output_neg_bn)
+        whole_seq_output_neg, final_memory_state_neg, final_carry_state_neg = lstm(whole_seq_output_neg_act)
+
+        return whole_seq_output, whole_seq_output_pos, whole_seq_output_neg
+
     def config_model(self):
         self.create_memory_bank()
-        #self.construct_knn_attribute_cohort()
-        #self.construct_knn_attribute_control()
+        self.construct_knn_attribute_cohort()
+        self.construct_knn_attribute_control()
         self.shuffle_train_data()
         self.LSTM_layers()
         bce = tf.keras.losses.BinaryCrossentropy()
@@ -259,7 +297,8 @@ class seq_cl():
         self.x_skip_contrast_self = self.whole_seq_output[:,self.time_sequence-self.positive_sample_size_self:,:]
         self.x_negative_contrast = self.whole_seq_out_neg_reshape[:,:,self.time_sequence-1,:]
         self.x_negative_contrast_time = self.whole_seq_out_neg_reshape
-        self.x_negative_contrast_self = self.whole_seq_out_neg_self_reshape[:,:,self.time_sequence-1,:]
+        #self.x_negative_contrast_self = self.whole_seq_out_neg_self_reshape[:,:,self.time_sequence-1,:]
+        self.x_negative_contrast_self = self.whole_seq_out_neg_self_reshape[:, :, 0, :]
         self.contrastive_learning()
         self.contrastive_learning_time()
         self.contrastive_learning_self()
@@ -272,6 +311,7 @@ class seq_cl():
         self.train_step_cl = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.log_normalized_prob)
         self.train_step_cl_time = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.log_normalized_prob_time)
         self.train_step_cl_self = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.log_normalized_prob_self)
+        #self.train_step_cl_attribute = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.log_normalized_prob_self)
         """
         focal loss
         """
@@ -532,10 +572,10 @@ class seq_cl():
                       self.vital_length + self.lab_length + self.blood_length))
         if label == 1:
             index_neighbor = np.array(self.knn_neighbor[name]['neg_knn_neighbor'])
-            self.patient_neg_sample_tensor = self.memory_bank_control[index_neighbor,:,:]
+            self.patient_neg_sample_tensor = self.memory_bank_cohort[index_neighbor,:,:]
         else:
             index_neighbor = np.array(self.knn_neighbor_control[name]['neg_knn_neighbor'])
-            self.patient_neg_sample_tensor = self.memory_bank_cohort[index_neighbor,:,:]
+            self.patient_neg_sample_tensor = self.memory_bank_control[index_neighbor,:,:]
 
 
     def aquire_neg_data_self(self,label):
@@ -555,11 +595,11 @@ class seq_cl():
 
     def pre_train(self):
         self.iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
-        for i in range(self.epoch):
+        for i in range(self.epoch_pre):
             for j in range(self.iteration):
                 print(j)
-                self.aquire_batch_data_cl(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
-                self.err_ = self.sess.run([self.log_normalized_prob_time, self.train_step_cl_time,self.logit_sig],
+                self.aquire_batch_data_cl_attribute(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
+                self.err_ = self.sess.run([self.log_normalized_prob_time, self.train_step_cl_self,self.logit_sig],
                                           feed_dict={self.input_x: self.one_batch_data,
                                                      self.input_y_logit: self.one_batch_logit_dp,
                                                      self.input_x_pos:self.one_batch_data_pos,
@@ -585,6 +625,8 @@ class seq_cl():
 
             print(self.err_[0])
             auc = roc_auc_score(self.one_batch_logit, self.err_[2])
+                #if j % 5 == 0:
+                    #auc = self.test()
             print(auc)
             self.step.append(j)
             self.acc.append(auc)
@@ -598,5 +640,6 @@ class seq_cl():
                                                                   #self.init_hiddenstate: init_hidden_state})
                                                                   #self.input_x_static: self.one_batch_data_static})
         print(roc_auc_score(self.one_batch_logit, self.out_logit))
+        return roc_auc_score(self.one_batch_logit, self.out_logit)
 
 

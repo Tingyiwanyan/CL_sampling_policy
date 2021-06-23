@@ -72,7 +72,7 @@ plt.ylim(0.0, 1.0)
 x = [0.0, 1.0]
 #plt.plot(x, x, linestyle='dashed', color='red', linewidth=1, label='random')
 
-plt.plot(step, supervised_acc, color='green', linewidth=1, linestyle='dashed',label='LSTM+supervised_k_random')
+plt.plot(step, supervised_acc, "x",color='green', linewidth=1, linestyle='dashed',label='LSTM+supervised_k_random')
 
 
 plt.plot(step, acc,color='blue',linestyle='dashed',linewidth=1,label='LSTM')
