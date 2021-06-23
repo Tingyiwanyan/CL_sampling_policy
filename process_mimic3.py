@@ -36,12 +36,12 @@ class read_data_mimic():
 
         self.file_names_all = self.file_names_cohort+self.file_names_control
 
-        self.time_sequence = 4
+        self.time_sequence = 2
         self.vital_length = 8
         self.lab_length = 19
         self.blood_length = 27
 
-        self.predict_window = 0
+        self.predict_window = 1
 
         self.mean_vital = [ 91.67865086, 120.80026402,  60.98199649,  78.39028852,
         19.64776703,  36.86108155,  96.71496552, 138.30870759]

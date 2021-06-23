@@ -19,7 +19,7 @@ class seq_cl():
         self.train_data_cohort = read_d.file_names_cohort[0:500]
         self.train_data_control = read_d.file_names_control[0:3000]
         self.test_data_cohort = read_d.file_names_cohort[500:700]
-        self.test_data_control = read_d.file_names_control[3000:3500]
+        self.test_data_control = read_d.file_names_control[3000:4000]
         self.train_data_cohort_mem = read_d.file_names_cohort[0:500]
         self.train_data_control_mem = read_d.file_names_control[0:3000]
         #self.train_data_cohort = self.train_data_cohort_mem

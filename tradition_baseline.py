@@ -32,10 +32,10 @@ class tradition_b():
         #self.test_data = read_d.test_set
         #self.length_train = len(self.train_data)
         #self.length_test = len(self.test_data)
-        self.train_data_cohort = read_d.file_names_cohort[0:1000]
-        self.train_data_control = read_d.file_names_control[0:7000]
-        self.test_data_cohort = read_d.file_names_cohort[1000:1400]
-        self.test_data_control = read_d.file_names_control[7000:10000]
+        self.train_data_cohort = read_d.file_names_cohort[0:500]
+        self.train_data_control = read_d.file_names_control[0:3000]
+        self.test_data_cohort = read_d.file_names_cohort[500:700]
+        self.test_data_control = read_d.file_names_control[3000:4000]
         self.train_length_cohort = len(self.train_data_cohort)
         self.train_length_control = len(self.train_data_control)
         self.batch_size = 32
@@ -47,7 +47,9 @@ class tradition_b():
         self.gamma = 2
         self.tau = 1
         self.lr = LogisticRegression(random_state=0)
-        self.rf = RandomForestClassifier(max_depth=100,random_state=0)
+        self.rf = RandomForestClassifier(max_depth=500,random_state=0)
+        self.svm = svm.SVC(probability=True)
+        self.xg_model = XGBClassifier()
 
     def aquire_batch_data_cohort(self, starting_index, data_set,length):
         self.one_batch_data_cohort = np.zeros((length,self.vital_length+self.lab_length+self.blood_length))#+self.static_length))
@@ -186,20 +188,142 @@ class tradition_b():
         self.aquire_batch_data_control(0, self.test_data_control, len(self.test_data_control))
         self.aquire_batch_data_whole()
         #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-        print(roc_auc_score(self.one_batch_logit_whole, self.lr.predict_proba(self.one_batch_data_whole)[:,1]))
+        print("auc")
+        print(roc_auc_score(self.one_batch_logit_whole, self.lr.predict_proba(self.one_batch_data_whole)[:, 1]))
+        print("auprc")
+        print(average_precision_score(self.one_batch_logit_whole, self.lr.predict_proba(self.one_batch_data_whole)[:, 1]))
 
 
     def random_forest(self):
-        self.aquire_batch_data(0, self.train_data, 3000)
-        self.rf.fit(self.one_batch_data, self.one_batch_logit)
+        self.aquire_batch_data_cohort(0, self.train_data_cohort, len(self.train_data_cohort))
+        self.aquire_batch_data_control(0, self.train_data_control, len(self.train_data_control))
+        self.aquire_batch_data_whole()
+        self.rf.fit(self.one_batch_data_whole, self.one_batch_logit_whole)
                 # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
                 # print(roc_auc_score(self.one_batch_logit,self.lr.predict_proba(self.one_batch_data)[:,1]))
 
         self.test_random_forest()
 
-    def test_random_forest_whole(self):
-        self.aquire_batch_data(0,self.test_data,self.length_test)
+    def test_random_forest(self):
+        sample_size_cohort = np.int(np.floor(len(self.test_data_cohort) * 4 / 5))
+        sample_size_control = np.int(np.floor(len(self.test_data_control) * 4 / 5))
+        auc = []
+        auprc = []
         #print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-        print(roc_auc_score(self.one_batch_logit, self.rf.predict(self.one_batch_data)))
+        #print(roc_auc_score(self.one_batch_logit, self.rf.predict(self.one_batch_data)))
+        for i in range(self.boost_iteration):
+            test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
+            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            self.aquire_batch_data_cohort(0,test_cohort, len(test_cohort))
+            self.aquire_batch_data_control(0, test_control, len(test_control))
+            self.aquire_batch_data_whole()
+            # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+            auc.append(roc_auc_score(self.one_batch_logit_whole, self.rf.predict_proba(self.one_batch_data_whole)[:,1]))
+            auprc.append(average_precision_score(self.one_batch_logit_whole,
+                                                 self.rf.predict_proba(self.one_batch_data_whole)[:,1]))
+
+        print("auc")
+        print(bs.bootstrap(np.array(auc), stat_func=bs_stats.mean))
+        print("auprc")
+        print(bs.bootstrap(np.array(auprc), stat_func=bs_stats.mean))
+
+    def test_random_forest_whole(self):
+        self.aquire_batch_data_cohort(0, self.test_data_cohort, len(self.test_data_cohort))
+        self.aquire_batch_data_control(0, self.test_data_control, len(self.test_data_control))
+        self.aquire_batch_data_whole()
+        # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+        print("auc")
+        print(
+            roc_auc_score(self.one_batch_logit_whole, self.rf.predict_proba(self.one_batch_data_whole)[:, 1]))
+        print("auprc")
+        print(average_precision_score(self.one_batch_logit_whole,
+                                      self.rf.predict_proba(self.one_batch_data_whole)[:, 1]))
+
+
+    def train_svm(self):
+        self.aquire_batch_data_cohort(0, self.train_data_cohort, len(self.train_data_cohort))
+        self.aquire_batch_data_control(0, self.train_data_control, len(self.train_data_control))
+        self.aquire_batch_data_whole()
+        self.svm.fit(self.one_batch_data_whole, self.one_batch_logit_whole)
+
+        self.test_svm()
+
+    def test_svm(self):
+        sample_size_cohort = np.int(np.floor(len(self.test_data_cohort) * 4 / 5))
+        sample_size_control = np.int(np.floor(len(self.test_data_control) * 4 / 5))
+        auc = []
+        auprc = []
+        for i in range(self.boost_iteration):
+            test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
+            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            self.aquire_batch_data_cohort(0, test_cohort, len(test_cohort))
+            self.aquire_batch_data_control(0, test_control, len(test_control))
+            self.aquire_batch_data_whole()
+            # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+            auc.append(
+                roc_auc_score(self.one_batch_logit_whole, self.svm.predict_proba(self.one_batch_data_whole)[:, 1]))
+            auprc.append(average_precision_score(self.one_batch_logit_whole,
+                                                 self.svm.predict_proba(self.one_batch_data_whole)[:, 1]))
+
+        print("auc")
+        print(bs.bootstrap(np.array(auc), stat_func=bs_stats.mean))
+        print("auprc")
+        print(bs.bootstrap(np.array(auprc), stat_func=bs_stats.mean))
+
+    def test_whole_svm(self):
+        self.aquire_batch_data_cohort(0, self.test_data_cohort, len(self.test_data_cohort))
+        self.aquire_batch_data_control(0, self.test_data_control, len(self.test_data_control))
+        self.aquire_batch_data_whole()
+        # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+        print("auc")
+        print(
+            roc_auc_score(self.one_batch_logit_whole, self.svm.predict_proba(self.one_batch_data_whole)[:, 1]))
+        print("auprc")
+        print(average_precision_score(self.one_batch_logit_whole,
+                                      self.svm.predict_proba(self.one_batch_data_whole)[:, 1]))
+
+    def train_xgb(self):
+        self.aquire_batch_data_cohort(0, self.train_data_cohort, len(self.train_data_cohort))
+        self.aquire_batch_data_control(0, self.train_data_control, len(self.train_data_control))
+        self.aquire_batch_data_whole()
+        self.xg_model.fit(self.one_batch_data_whole, self.one_batch_logit_whole)
+
+        self.test_xgb()
+
+
+    def test_xgb(self):
+        sample_size_cohort = np.int(np.floor(len(self.test_data_cohort) * 4 / 5))
+        sample_size_control = np.int(np.floor(len(self.test_data_control) * 4 / 5))
+        auc = []
+        auprc = []
+        for i in range(self.boost_iteration):
+            test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
+            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            self.aquire_batch_data_cohort(0, test_cohort, len(test_cohort))
+            self.aquire_batch_data_control(0, test_control, len(test_control))
+            self.aquire_batch_data_whole()
+            # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+            auc.append(
+                roc_auc_score(self.one_batch_logit_whole, self.xg_model.predict_proba(self.one_batch_data_whole)[:, 1]))
+            auprc.append(average_precision_score(self.one_batch_logit_whole,
+                                                 self.xg_model.predict_proba(self.one_batch_data_whole)[:, 1]))
+
+        print("auc")
+        print(bs.bootstrap(np.array(auc), stat_func=bs_stats.mean))
+        print("auprc")
+        print(bs.bootstrap(np.array(auprc), stat_func=bs_stats.mean))
+
+    def test_whole_xgb(self):
+        self.aquire_batch_data_cohort(0, self.test_data_cohort, len(self.test_data_cohort))
+        self.aquire_batch_data_control(0, self.test_data_control, len(self.test_data_control))
+        self.aquire_batch_data_whole()
+        # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+        print("auc")
+        print(
+            roc_auc_score(self.one_batch_logit_whole, self.xg_model.predict_proba(self.one_batch_data_whole)[:, 1]))
+        print("auprc")
+        print(average_precision_score(self.one_batch_logit_whole,
+                                      self.xg_model.predict_proba(self.one_batch_data_whole)[:, 1]))
+
 
 
