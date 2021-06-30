@@ -36,7 +36,7 @@ class read_data_mimic():
 
         self.file_names_all = self.file_names_cohort+self.file_names_control
 
-        self.time_sequence = 2
+        self.time_sequence = 4
         self.vital_length = 8
         self.lab_length = 19
         self.blood_length = 27

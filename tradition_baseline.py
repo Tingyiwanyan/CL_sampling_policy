@@ -36,20 +36,41 @@ class tradition_b():
         self.train_data_control = read_d.file_names_control[0:3000]
         self.test_data_cohort = read_d.file_names_cohort[500:700]
         self.test_data_control = read_d.file_names_control[3000:4000]
+        self.val_data_cohort = read_d.file_names_cohort[700:750]
+        self.val_data_control = read_d.file_names_control[4000:4600]
         self.train_length_cohort = len(self.train_data_cohort)
         self.train_length_control = len(self.train_data_control)
-        self.batch_size = 32
+        self.length_train = self.train_length_control + self.train_length_cohort
+        self.train_data_all = self.train_data_cohort + self.train_data_control
+        self.logit = np.zeros(self.train_length_cohort + self.train_length_control)
+        self.logit[0:self.train_length_cohort] = 1
+        self.batch_size = 64
         self.vital_length = 8
         self.lab_length = 19
         self.blood_length = 27
         self.boost_iteration = 10
-        self.epoch = 2
+        self.epoch = 3
         self.gamma = 2
         self.tau = 1
         self.lr = LogisticRegression(random_state=0)
         self.rf = RandomForestClassifier(max_depth=500,random_state=0)
         self.svm = svm.SVC(probability=True)
         self.xg_model = XGBClassifier()
+
+    def aquire_batch_data(self, starting_index, data_set,length,logit_input):
+        self.one_batch_data = np.zeros((length,self.vital_length+self.lab_length+self.blood_length))
+        self.one_batch_logit = np.array(list(logit_input[starting_index:starting_index+length]))
+        self.one_batch_logit_dp = np.zeros((length,1))
+        self.one_batch_logit_dp[:,0] = self.one_batch_logit
+        for i in range(length):
+            name = data_set[starting_index+i]
+            if self.one_batch_logit[i] == 1:
+                self.read_d.return_data_dynamic_cohort(name)
+            else:
+                self.read_d.return_data_dynamic_control(name)
+            one_data = self.read_d.one_data_tensor
+            one_data = np.mean(one_data, 0)
+            self.one_batch_data[i,:] = one_data
 
     def aquire_batch_data_cohort(self, starting_index, data_set,length):
         self.one_batch_data_cohort = np.zeros((length,self.vital_length+self.lab_length+self.blood_length))#+self.static_length))
@@ -87,13 +108,20 @@ class tradition_b():
         self.one_batch_data_whole = np.concatenate((self.one_batch_data_cohort,self.one_batch_data_control),axis=0)
         self.one_batch_logit_whole = self.one_batch_logit_cohort + self.one_batch_logit_control
 
+    def shuffle_train_data(self):
+        self.shuffle_num = np.array(range(self.train_length_cohort+self.train_length_control))
+        np.random.shuffle(self.shuffle_num)
+        self.shuffle_train = np.array(self.train_data_all)[self.shuffle_num]
+        self.shuffle_logit = self.logit[self.shuffle_num]
+
     def MLP_config(self):
+        self.shuffle_train_data()
         self.input_y_logit = tf.keras.backend.placeholder(
             [None, 1])
         self.input_x = tf.keras.backend.placeholder(
-            [None, self.vital_length + self.lab_length])
+            [None, self.vital_length + self.lab_length+self.blood_length])
         self.embedding = tf.compat.v1.layers.dense(inputs=self.input_x,
-                                                   units=50,
+                                                   units=80,
                                                    kernel_initializer=tf.keras.initializers.he_normal(seed=None),
                                                    activation=tf.nn.relu)
         self.logit_sig = tf.compat.v1.layers.dense(inputs=self.embedding,
@@ -119,32 +147,85 @@ class tradition_b():
         tf.global_variables_initializer().run()
         tf.local_variables_initializer().run()
 
+
     def MLP_train(self):
         #init_hidden_state = np.zeros(
             #(self.batch_size, 1 + self.positive_sample_size + self.negative_sample_size, self.latent_dim))
+        self.step = []
+        self.acc = []
         self.iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
         for i in range(self.epoch):
             for j in range(self.iteration):
-                print(j)
-                self.aquire_batch_data(j*self.batch_size, self.train_data, self.batch_size)
+                #print(j)
+                self.aquire_batch_data(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
                 self.err_ = self.sess.run([self.focal_loss, self.train_step_fl],
                                           feed_dict={self.input_x: self.one_batch_data,
                                                      #self.input_x_static:self.one_batch_data_static,
                                                      self.input_y_logit: self.one_batch_logit_dp})
                                                      #self.init_hiddenstate: init_hidden_state})
-                print(self.err_[0])
-            self.MLP_test()
+                #print(self.err_[0])
+                if j%10 == 0:
+                    print(j)
+                    self.MLP_val()
+                    self.acc.append(self.temp_auc)
+            print("epoch")
+            print(i)
+
+        self.MLP_test()
+
+    def MLP_val(self):
+        self.aquire_batch_data_cohort(0, self.val_data_cohort, len(self.val_data_cohort))
+        self.aquire_batch_data_control(0, self.val_data_control, len(self.val_data_control))
+        self.aquire_batch_data_whole()
+        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data_whole})
+
+        print(roc_auc_score(self.one_batch_logit_whole, self.out_logit))
+        self.temp_auc = roc_auc_score(self.one_batch_logit_whole, self.out_logit)
 
     def MLP_test(self):
         #init_hidden_state = np.zeros(
             #(self.length_test, 1 + self.positive_sample_size + self.negative_sample_size, self.latent_dim))
-        self.aquire_batch_data(0, self.test_data, self.length_test)
+        #self.aquire_batch_data(0, self.test_data, self.length_test)
         # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data})
+        #self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data_whole})
                                                                   #self.init_hiddenstate: init_hidden_state})
                                                                   #self.input_x_static: self.one_batch_data_static})
-        print(roc_auc_score(self.one_batch_logit, self.out_logit))
+        #print(roc_auc_score(self.one_batch_logit, self.out_logit))
 
+        sample_size_cohort = np.int(np.floor(len(self.test_data_cohort) * 4 / 5))
+        sample_size_control = np.int(np.floor(len(self.test_data_control) * 4 / 5))
+        auc = []
+        auprc = []
+        for i in range(self.boost_iteration):
+            print(i)
+            test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
+            test_control = resample(self.test_data_control, n_samples=sample_size_control)
+            self.aquire_batch_data_cohort(0, test_cohort, len(test_cohort))
+            self.aquire_batch_data_control(0, test_control, len(test_control))
+            self.aquire_batch_data_whole()
+            # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+            self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data_whole})
+            auc.append(
+                roc_auc_score(self.one_batch_logit_whole, self.out_logit))
+            auprc.append(average_precision_score(self.one_batch_logit_whole, self.out_logit))
+
+        print("auc")
+        print(bs.bootstrap(np.array(auc), stat_func=bs_stats.mean))
+        print("auprc")
+        print(bs.bootstrap(np.array(auprc), stat_func=bs_stats.mean))
+
+    def MLP_test_whole(self):
+        self.aquire_batch_data_cohort(0, self.test_data_cohort, len(self.test_data_cohort))
+        self.aquire_batch_data_control(0, self.test_data_control, len(self.test_data_control))
+        self.aquire_batch_data_whole()
+        # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data_whole})
+        print("auc")
+        print(roc_auc_score(self.one_batch_logit_whole, self.out_logit))
+        print("auprc")
+        print(
+            average_precision_score(self.one_batch_logit_whole, self.out_logit))
+        np.savetxt('MLP_prob.out', self.out_logit)
 
 
     def logistic_regression(self):
@@ -168,7 +249,7 @@ class tradition_b():
         auprc = []
         for i in range(self.boost_iteration):
             test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
-            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            test_control = resample(self.test_data_control, n_samples=sample_size_control)
             self.aquire_batch_data_cohort(0,test_cohort, len(test_cohort))
             self.aquire_batch_data_control(0, test_control, len(test_control))
             self.aquire_batch_data_whole()
@@ -192,6 +273,8 @@ class tradition_b():
         print(roc_auc_score(self.one_batch_logit_whole, self.lr.predict_proba(self.one_batch_data_whole)[:, 1]))
         print("auprc")
         print(average_precision_score(self.one_batch_logit_whole, self.lr.predict_proba(self.one_batch_data_whole)[:, 1]))
+        np.savetxt('logistic_prob.out',self.lr.predict_proba(self.one_batch_data_whole)[:, 1])
+
 
 
     def random_forest(self):
@@ -213,7 +296,7 @@ class tradition_b():
         #print(roc_auc_score(self.one_batch_logit, self.rf.predict(self.one_batch_data)))
         for i in range(self.boost_iteration):
             test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
-            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            test_control = resample(self.test_data_control, n_samples=sample_size_control)
             self.aquire_batch_data_cohort(0,test_cohort, len(test_cohort))
             self.aquire_batch_data_control(0, test_control, len(test_control))
             self.aquire_batch_data_whole()
@@ -238,6 +321,7 @@ class tradition_b():
         print("auprc")
         print(average_precision_score(self.one_batch_logit_whole,
                                       self.rf.predict_proba(self.one_batch_data_whole)[:, 1]))
+        np.savetxt('rf_prob.out', self.rf.predict_proba(self.one_batch_data_whole)[:, 1])
 
 
     def train_svm(self):
@@ -255,7 +339,7 @@ class tradition_b():
         auprc = []
         for i in range(self.boost_iteration):
             test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
-            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            test_control = resample(self.test_data_control, n_samples=sample_size_control)
             self.aquire_batch_data_cohort(0, test_cohort, len(test_cohort))
             self.aquire_batch_data_control(0, test_control, len(test_control))
             self.aquire_batch_data_whole()
@@ -282,6 +366,8 @@ class tradition_b():
         print(average_precision_score(self.one_batch_logit_whole,
                                       self.svm.predict_proba(self.one_batch_data_whole)[:, 1]))
 
+        np.savetxt('svm_prob.out', self.svm.predict_proba(self.one_batch_data_whole)[:, 1])
+
     def train_xgb(self):
         self.aquire_batch_data_cohort(0, self.train_data_cohort, len(self.train_data_cohort))
         self.aquire_batch_data_control(0, self.train_data_control, len(self.train_data_control))
@@ -298,7 +384,7 @@ class tradition_b():
         auprc = []
         for i in range(self.boost_iteration):
             test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
-            test_control = resample(self.test_data_cohort, n_samples=sample_size_control)
+            test_control = resample(self.test_data_control, n_samples=sample_size_control)
             self.aquire_batch_data_cohort(0, test_cohort, len(test_cohort))
             self.aquire_batch_data_control(0, test_control, len(test_control))
             self.aquire_batch_data_whole()
@@ -324,6 +410,7 @@ class tradition_b():
         print("auprc")
         print(average_precision_score(self.one_batch_logit_whole,
                                       self.xg_model.predict_proba(self.one_batch_data_whole)[:, 1]))
+        np.savetxt('xgb_prob.out', self.xg_model.predict_proba(self.one_batch_data_whole)[:, 1])
 
 
 

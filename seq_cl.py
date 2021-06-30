@@ -6,9 +6,15 @@ from sklearn.metrics import recall_score
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.metrics import roc_auc_score
+from sklearn.metrics import average_precision_score
 from sklearn.neighbors import NearestNeighbors
+import bootstrapped.bootstrap as bs
+import bootstrapped.stats_functions as bs_stats
 import tensorflow as tf
 import numpy as np
+from sklearn.utils import resample
+import random
+
 
 class seq_cl():
     """
@@ -22,6 +28,8 @@ class seq_cl():
         self.test_data_control = read_d.file_names_control[3000:4000]
         self.train_data_cohort_mem = read_d.file_names_cohort[0:500]
         self.train_data_control_mem = read_d.file_names_control[0:3000]
+        self.val_data_cohort = read_d.file_names_cohort[700:750]
+        self.val_data_control = read_d.file_names_control[4000:4600]
         #self.train_data_cohort = self.train_data_cohort_mem
         #self.train_data_control = self.train_data_control_mem
         self.train_length_cohort_mem = len(self.train_data_cohort_mem)
@@ -32,26 +40,35 @@ class seq_cl():
        # self.train_length_control = self.train_length_control_mem
         self.test_length_cohort = len(self.test_data_cohort)
         self.test_length_control = len(self.test_data_control)
+        self.val_length_cohort = len(self.val_data_cohort)
+        self.val_length_control = len(self.val_data_control)
         self.length_train = self.train_length_cohort+self.train_length_control
-        self.batch_size = 128
+        self.batch_size = 64
         self.vital_length = 8
         self.lab_length = 19
         self.blood_length = 27
-        self.epoch = 2
+        self.epoch = 3
         self.epoch_pre = 2
         self.gamma = 2
         self.tau = 1
         self.latent_dim = 100
+        self.layer2_dim = 50
+        self.layer3_dim = 32
+        self.final_dim = self.layer2_dim
+        self.boost_iteration = 10
         self.time_sequence = self.read_d.time_sequence
-        self.positive_sample_size = 4
+        self.positive_sample_size = 5
         self.positive_sample_size_self = 2
-        self.negative_sample_size = 10
+        self.negative_sample_size = 15
         self.train_data_all = self.train_data_cohort + self.train_data_control
         self.logit = np.zeros(self.train_length_cohort+self.train_length_control)
         self.logit[0:self.train_length_cohort] = 1
         self.test_data_all = self.test_data_cohort + self.test_data_control
+        self.val_data_all = self.val_data_cohort + self.val_data_control
         self.logit_test = np.zeros(self.test_length_cohort+self.test_length_control)
         self.logit_test[0:self.test_length_cohort] = 1
+        self.logit_val = np.zeros(self.val_length_cohort + self.val_length_control)
+        self.logit_val[0:self.val_length_cohort] = 1
 
     def create_memory_bank(self):
         self.memory_bank_cohort = np.zeros((self.train_length_cohort_mem,self.time_sequence,
@@ -248,7 +265,7 @@ class seq_cl():
                                                                                 self.latent_dim])
 
 
-    def LSTM_layers_stack(self, whole_seq_input, seq_input_pos, seq_input_neg, output_dim):
+    def LSTM_layers_stack(self, whole_seq_input, seq_input_pos, seq_input_neg, seq_input_neg_self, output_dim):
         lstm = tf.keras.layers.LSTM(output_dim, return_sequences=True, return_state=True)
 
         #whole_seq_output,final_memory_state,final_carry_state = lstm(whole_seq_input_act)
@@ -282,7 +299,15 @@ class seq_cl():
         whole_seq_output_neg_act = layer(whole_seq_output_neg_bn)
         whole_seq_output_neg, final_memory_state_neg, final_carry_state_neg = lstm(whole_seq_output_neg_act)
 
-        return whole_seq_output, whole_seq_output_pos, whole_seq_output_neg
+        """
+        negative sample self
+        """
+        whole_seq_output_neg_self_ = dense(seq_input_neg_self)
+        whole_seq_output_neg_self_bn = BN(whole_seq_output_neg_self_)
+        whole_seq_output_neg_self_act = layer(whole_seq_output_neg_self_bn)
+        whole_seq_output_neg_self, final_memory_state_neg_self, final_carry_state_neg_self = lstm(whole_seq_output_neg_self_act)
+
+        return whole_seq_output, whole_seq_output_pos, whole_seq_output_neg, whole_seq_output_neg_self
 
     def config_model(self):
         self.create_memory_bank()
@@ -290,11 +315,38 @@ class seq_cl():
         self.construct_knn_attribute_control()
         self.shuffle_train_data()
         self.LSTM_layers()
+        """
+        LSTM stack layers
+        """
+
+        whole_seq_output, whole_seq_output_pos, whole_seq_output_neg, whole_seq_output_neg_self = \
+            self.LSTM_layers_stack(self.whole_seq_output,
+                                   self.whole_seq_output_pos, self.whole_seq_output_neg,self.whole_seq_output_neg_self,
+                                   self.layer2_dim)
+        # whole_seq_output, whole_seq_output_pos, whole_seq_output_neg = \
+        # self.LSTM_layers_stack(whole_seq_output1,
+        # whole_seq_output_pos1, whole_seq_output_neg1, self.layer3_dim)
+
+        self.whole_seq_out_pos_reshape = tf.reshape(whole_seq_output_pos, [self.batch_size,
+                                                                           self.positive_sample_size,
+                                                                           self.time_sequence,
+                                                                           self.final_dim])
+        self.whole_seq_out_neg_reshape = tf.reshape(whole_seq_output_neg, [self.batch_size,
+                                                                           self.negative_sample_size,
+                                                                           self.time_sequence,
+                                                                           self.final_dim])
+
+        self.whole_seq_out_neg_self_reshape = tf.reshape(whole_seq_output_neg_self, [self.batch_size,
+                                                                                          self.negative_sample_size,
+                                                                                          self.time_sequence,
+                                                                                          self.final_dim])
+
         bce = tf.keras.losses.BinaryCrossentropy()
-        self.x_origin = self.whole_seq_output[:,self.time_sequence-1,:]
+        self.x_origin = whole_seq_output[:,self.time_sequence-1,:]
+        self.whole_seq_output_final = whole_seq_output
         self.x_skip_contrast = self.whole_seq_out_pos_reshape[:,:,self.time_sequence-1,:]
         self.x_skip_contrast_time = self.whole_seq_out_pos_reshape
-        self.x_skip_contrast_self = self.whole_seq_output[:,self.time_sequence-self.positive_sample_size_self:,:]
+        self.x_skip_contrast_self = whole_seq_output[:,self.time_sequence-self.positive_sample_size_self:,:]
         self.x_negative_contrast = self.whole_seq_out_neg_reshape[:,:,self.time_sequence-1,:]
         self.x_negative_contrast_time = self.whole_seq_out_neg_reshape
         #self.x_negative_contrast_self = self.whole_seq_out_neg_self_reshape[:,:,self.time_sequence-1,:]
@@ -327,6 +379,10 @@ class seq_cl():
         self.train_step_fl = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.focal_loss)
         self.train_step_combine_fl = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(
             self.focal_loss + 0.8 * self.log_normalized_prob)
+        self.train_step_combine_fl_time = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(
+            self.focal_loss + 0.8 * self.log_normalized_prob_time)
+        self.train_step_combine_fl_self = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(
+            self.focal_loss + 0.8 * self.log_normalized_prob_self)
         self.sess = tf.InteractiveSession()
         tf.global_variables_initializer().run()
         tf.local_variables_initializer().run()
@@ -337,9 +393,9 @@ class seq_cl():
          """
         self.x_origin_cl = tf.expand_dims(self.x_origin,axis=1)
         self.positive_broad = tf.broadcast_to(self.x_origin_cl,
-                                              [self.batch_size, self.positive_sample_size, self.latent_dim])
+                                              [self.batch_size, self.positive_sample_size, self.final_dim])
         self.negative_broad = tf.broadcast_to(self.x_origin_cl,
-                                              [self.batch_size, self.negative_sample_size, self.latent_dim])
+                                              [self.batch_size, self.negative_sample_size, self.final_dim])
 
         self.positive_broad_norm = tf.math.l2_normalize(self.positive_broad, axis=2)
         self.positive_sample_norm = tf.math.l2_normalize(self.x_skip_contrast, axis=2)
@@ -374,9 +430,9 @@ class seq_cl():
         """
         self.x_origin_cl = tf.expand_dims(self.x_origin,axis=1)
         self.positive_broad = tf.broadcast_to(self.x_origin_cl,
-                                              [self.batch_size, self.positive_sample_size_self, self.latent_dim])
+                                              [self.batch_size, self.positive_sample_size_self, self.final_dim])
         self.negative_broad = tf.broadcast_to(self.x_origin_cl,
-                                              [self.batch_size, self.negative_sample_size, self.latent_dim])
+                                              [self.batch_size, self.negative_sample_size, self.final_dim])
 
         self.positive_broad_norm = tf.math.l2_normalize(self.positive_broad, axis=2)
         self.positive_sample_norm = tf.math.l2_normalize(self.x_skip_contrast_self, axis=2)
@@ -410,13 +466,13 @@ class seq_cl():
         """
         supervised time level contrastive learning
         """
-        self.x_origin_time = tf.expand_dims(self.whole_seq_output, axis=1)
+        self.x_origin_time = tf.expand_dims(self.whole_seq_output_final, axis=1)
         self.positive_broad_time = tf.broadcast_to(self.x_origin_time,
                                                    [self.batch_size, self.positive_sample_size, self.time_sequence,
-                                                    self.latent_dim])
+                                                    self.final_dim])
         self.negative_broad_time = tf.broadcast_to(self.x_origin_time,
                                                    [self.batch_size, self.negative_sample_size, self.time_sequence,
-                                                    self.latent_dim])
+                                                    self.final_dim])
 
         self.positive_broad_norm_time = tf.math.l2_normalize(self.positive_broad_time, axis=3)
         self.positive_sample_norm_time = tf.math.l2_normalize(self.x_skip_contrast_time, axis=3)
@@ -598,8 +654,8 @@ class seq_cl():
         for i in range(self.epoch_pre):
             for j in range(self.iteration):
                 print(j)
-                self.aquire_batch_data_cl_attribute(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
-                self.err_ = self.sess.run([self.log_normalized_prob_time, self.train_step_cl_self,self.logit_sig],
+                self.aquire_batch_data_cl(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
+                self.err_ = self.sess.run([self.log_normalized_prob_time, self.train_step_cl_time,self.logit_sig],
                                           feed_dict={self.input_x: self.one_batch_data,
                                                      self.input_y_logit: self.one_batch_logit_dp,
                                                      self.input_x_pos:self.one_batch_data_pos,
@@ -613,33 +669,83 @@ class seq_cl():
         self.step = []
         self.acc = []
         self.iteration = np.int(np.floor(np.float(self.length_train) / self.batch_size))
-        #for i in range(self.epoch):
-        for j in range(self.iteration):
-            print(j)
-            self.aquire_batch_data(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
-            self.err_ = self.sess.run([self.focal_loss, self.train_step_fl,self.logit_sig],
-                                      feed_dict={self.input_x: self.one_batch_data,
-                                                 self.input_y_logit: self.one_batch_logit_dp})
-                                                 #self.input_x_pos:self.one_batch_data_pos,
-                                                 #self.input_x_neg:self.one_batch_data_neg})
+        for i in range(self.epoch):
+            for j in range(self.iteration):
+                #print(j)
+                self.aquire_batch_data_cl(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
+                self.err_ = self.sess.run([self.focal_loss, self.train_step_combine_fl_self,self.logit_sig],
+                                          feed_dict={self.input_x: self.one_batch_data,
+                                                     self.input_y_logit: self.one_batch_logit_dp,
+                                                     self.input_x_pos:self.one_batch_data_pos,
+                                                     self.input_x_neg:self.one_batch_data_neg,
+                                                     self.input_x_neg_self:self.one_batch_data_neg_self})
 
-            print(self.err_[0])
-            auc = roc_auc_score(self.one_batch_logit, self.err_[2])
-                #if j % 5 == 0:
-                    #auc = self.test()
-            print(auc)
-            self.step.append(j)
-            self.acc.append(auc)
+                #print(self.err_[0])
+                #auc = roc_auc_score(self.one_batch_logit, self.err_[2])
+                    #if j % 5 == 0:
+                        #auc = self.test()
+                #print(auc)
+                #self.step.append(j)
+                #self.acc.append(auc)
+
+                if j % 10 == 0:
+                    print(j)
+                    self.val()
+                    self.acc.append(self.temp_auc)
+            print("epoch")
+            print(i)
+
+        self.test()
 
             #self.test()
 
     def test(self):
-        self.aquire_batch_data(0, self.test_data_all, self.test_length_cohort+self.test_length_control,self.logit_test)
+        sample_size_cohort = np.int(np.floor(len(self.test_data_cohort) * 4 / 5))
+        sample_size_control = np.int(np.floor(len(self.test_data_control) * 4 / 5))
+        auc = []
+        auprc = []
+        for i in range(self.boost_iteration):
+            print(i)
+            test_cohort = resample(self.test_data_cohort, n_samples=sample_size_cohort)
+            test_control = resample(self.test_data_control, n_samples=sample_size_control)
+            test_data = test_cohort + test_control
+            logit_test = np.zeros(len(test_cohort) + len(test_control))
+            logit_test[0:len(test_cohort)] = 1
+            self.aquire_batch_data(0, test_data, len(test_data),logit_test)
         # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
-        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data})
+            self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data})
                                                                   #self.init_hiddenstate: init_hidden_state})
                                                                   #self.input_x_static: self.one_batch_data_static})
+            auc.append(
+                roc_auc_score(self.one_batch_logit, self.out_logit))
+            auprc.append(average_precision_score(self.one_batch_logit, self.out_logit))
+        print("auc")
+        print(bs.bootstrap(np.array(auc), stat_func=bs_stats.mean))
+        print("auprc")
+        print(bs.bootstrap(np.array(auprc), stat_func=bs_stats.mean))
+        #print(roc_auc_score(self.one_batch_logit, self.out_logit))
+        #return roc_auc_score(self.one_batch_logit, self.out_logit)
+
+    def test_whole(self):
+        # print(self.lr.score(self.one_batch_data,self.one_batch_logit))
+        self.aquire_batch_data(0, self.test_data_all, self.test_length_cohort + self.test_length_control, self.logit_test)
+        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data})
+        print("auc")
+        print(
+            roc_auc_score(self.one_batch_logit, self.out_logit))
+        print("auprc")
+        print(average_precision_score(self.one_batch_logit,
+                                      self.out_logit))
+        #np.savetxt('xgb_prob.out', self.out_logit)
+
+
+    def val(self):
+        self.aquire_batch_data(0, self.val_data_all, self.val_length_cohort+self.val_length_control,self.logit_val)
+        self.out_logit = self.sess.run(self.logit_sig, feed_dict={self.input_x: self.one_batch_data})
+
         print(roc_auc_score(self.one_batch_logit, self.out_logit))
-        return roc_auc_score(self.one_batch_logit, self.out_logit)
+        self.temp_auc = roc_auc_score(self.one_batch_logit, self.out_logit)
+
+    #def test_whole(self):
 
 
