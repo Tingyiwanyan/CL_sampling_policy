@@ -9,23 +9,23 @@ from hierarchy_cl_learning import hier_cl
 from tradition_baseline import tradition_b
 from deep_learning_appro import dp_appro
 from seq_cl import seq_cl
-
+from seq_modern import seq_modern
 
 class read_data_mimic():
     """
     Loading data, mean and std are pre-computed
     """
     def __init__(self):
-        self.file_path_vital_cohort = '/home/tingyi/m3_data/cohort_vital/'
-        self.file_path_vital_control = '/home/tingyi/m3_data/control_vital/'
-        self.file_path_lab_cohort = '/home/tingyi/m3_data/cohort_lab/'
-        self.file_path_lab_control = '/home/tingyi/m3_data/control_lab/'
-        self.file_path_blood_gas_cohort = '/home/tingyi/m3_data/cohort_blood_gas/'
-        self.file_path_blood_gas_control = '/home/tingyi/m3_data/control_blood_gas/'
-        self.file_path_sepsis_cohort = '/home/tingyi/m3_data/sepsis_cohort/'
-        self.file_path_sepsis_control = '/home/tingyi/m3_data/sepsis_control/'
-        self.file_path_sofa_6hourly_cohort = '/home/tingyi/m3_data/sofa_6hourly_cohort/'
-        self.file_path_sofa_6hourly_control = '/home/tingyi/m3_data/sofa_6hourly_control/'
+        self.file_path_vital_cohort = '/home/tingyi/m3_data_3hour/cohort_vital/'
+        self.file_path_vital_control = '/home/tingyi/m3_data_3hour/control_vital/'
+        self.file_path_lab_cohort = '/home/tingyi/m3_data_3hour/cohort_lab/'
+        self.file_path_lab_control = '/home/tingyi/m3_data_3hour/control_lab/'
+        self.file_path_blood_gas_cohort = '/home/tingyi/m3_data_3hour/cohort_blood_gas/'
+        self.file_path_blood_gas_control = '/home/tingyi/m3_data_3hour/control_blood_gas/'
+        self.file_path_sepsis_cohort = '/home/tingyi/m3_data_3hour/sepsis_cohort/'
+        self.file_path_sepsis_control = '/home/tingyi/m3_data_3hour/sepsis_control/'
+        self.file_path_sofa_6hourly_cohort = '/home/tingyi/m3_data_3hour/sofa_3hourly_cohort/'
+        self.file_path_sofa_6hourly_control = '/home/tingyi/m3_data_3hour/sofa_3hourly_control/'
         file = open("sepsis_cohort.txt","r")
         self.cohort_names = file.read()
         self.file_names_cohort = self.cohort_names.split("\n") #listdir(self.file_path_vital)
@@ -41,7 +41,7 @@ class read_data_mimic():
         self.lab_length = 19
         self.blood_length = 27
 
-        self.predict_window = 1
+        self.predict_window = 4
 
         self.mean_vital = [ 91.67865086, 120.80026402,  60.98199649,  78.39028852,
         19.64776703,  36.86108155,  96.71496552, 138.30870759]
@@ -438,3 +438,4 @@ if __name__ == "__main__":
     tb = tradition_b(read_d_mimic)
     #dp = dp_appro(read_d_mimic)
     seq = seq_cl(read_d_mimic)
+    seq_m = seq_modern(read_d_mimic)

@@ -58,7 +58,7 @@ class seq_cl():
         self.boost_iteration = 10
         self.time_sequence = self.read_d.time_sequence
         self.positive_sample_size = 5
-        self.positive_sample_size_self = 2
+        self.positive_sample_size_self = 1
         self.negative_sample_size = 15
         self.train_data_all = self.train_data_cohort + self.train_data_control
         self.logit = np.zeros(self.train_length_cohort+self.train_length_control)
@@ -346,11 +346,12 @@ class seq_cl():
         self.whole_seq_output_final = whole_seq_output
         self.x_skip_contrast = self.whole_seq_out_pos_reshape[:,:,self.time_sequence-1,:]
         self.x_skip_contrast_time = self.whole_seq_out_pos_reshape
-        self.x_skip_contrast_self = whole_seq_output[:,self.time_sequence-self.positive_sample_size_self:,:]
+        self.x_skip_contrast_self = whole_seq_output[:,self.time_sequence-2:self.time_sequence-1,:]
         self.x_negative_contrast = self.whole_seq_out_neg_reshape[:,:,self.time_sequence-1,:]
         self.x_negative_contrast_time = self.whole_seq_out_neg_reshape
         #self.x_negative_contrast_self = self.whole_seq_out_neg_self_reshape[:,:,self.time_sequence-1,:]
-        self.x_negative_contrast_self = self.whole_seq_out_neg_self_reshape[:, :, 0, :]
+        self.x_negative_contrast_self = self.whole_seq_out_neg_self_reshape[:, :, self.time_sequence-1, :]
+        #self.x_negative_contrast_self = self.whole_seq_output[:, :, 0, :]
         self.contrastive_learning()
         self.contrastive_learning_time()
         self.contrastive_learning_self()
@@ -435,7 +436,7 @@ class seq_cl():
                                               [self.batch_size, self.negative_sample_size, self.final_dim])
 
         self.positive_broad_norm = tf.math.l2_normalize(self.positive_broad, axis=2)
-        self.positive_sample_norm = tf.math.l2_normalize(self.x_skip_contrast_self, axis=2)
+        self.positive_sample_norm = tf.math.l2_normalize(self.x_skip_contrast_self, axis=1)
 
         self.positive_dot_prod = tf.multiply(self.positive_broad_norm, self.positive_sample_norm)
         self.positive_check_prod = tf.reduce_sum(self.positive_dot_prod, 2)
@@ -570,7 +571,7 @@ class seq_cl():
             one_data = self.read_d.one_data_tensor
             self.one_batch_data[i, :, :] = one_data
             self.aquire_pos_data_attribute(label,name)
-            self.aquire_neg_data_attribute(label,name)
+            self.aquire_neg_data_random(label)
             self.aquire_neg_data_self(label)
             self.one_batch_data_pos[i * self.positive_sample_size:(i + 1) * self.positive_sample_size, :, :] = \
                 self.patient_pos_sample_tensor
@@ -672,8 +673,8 @@ class seq_cl():
         for i in range(self.epoch):
             for j in range(self.iteration):
                 #print(j)
-                self.aquire_batch_data_cl(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
-                self.err_ = self.sess.run([self.focal_loss, self.train_step_combine_fl_self,self.logit_sig],
+                self.aquire_batch_data_cl_attribute(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
+                self.err_ = self.sess.run([self.focal_loss, self.train_step_fl,self.logit_sig],
                                           feed_dict={self.input_x: self.one_batch_data,
                                                      self.input_y_logit: self.one_batch_logit_dp,
                                                      self.input_x_pos:self.one_batch_data_pos,
