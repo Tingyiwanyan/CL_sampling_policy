@@ -304,7 +304,7 @@ class seq_modern():
         self.focal_loss_ = - alpha_t * tf.math.pow((tf.ones_like(self.input_y_logit) - p_t), self.gamma) * tf.math.log(
             p_t)
         self.focal_loss = tf.reduce_mean(self.focal_loss_)
-        self.train_step_fl = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(self.focal_loss)
+        self.train_step_fl = tf.compat.v1.train.AdamOptimizer(1e-4).minimize(self.focal_loss)
         self.sess = tf.InteractiveSession()
         tf.global_variables_initializer().run()
         tf.local_variables_initializer().run()

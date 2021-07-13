@@ -3,17 +3,12 @@
   <component name="ChangeListManager">
     <list default="true" id="31baeeb3-fc4b-473a-a6ed-2bdfec0ffede" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LSTM_random_self.out" beforeDir="false" afterPath="$PROJECT_DIR$/LSTM_random_self.out" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LSTM_random_time.out" beforeDir="false" afterPath="$PROJECT_DIR$/LSTM_random_time.out" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MLP_prob.out" beforeDir="false" afterPath="$PROJECT_DIR$/MLP_prob.out" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/draw_cal.py" beforeDir="false" afterPath="$PROJECT_DIR$/draw_cal.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/draw_learning_curve.py" beforeDir="false" afterPath="$PROJECT_DIR$/draw_learning_curve.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/learning_curve.py" beforeDir="false" afterPath="$PROJECT_DIR$/learning_curve.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/process_mimic3.py" beforeDir="false" afterPath="$PROJECT_DIR$/process_mimic3.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rf_prob.out" beforeDir="false" afterPath="$PROJECT_DIR$/rf_prob.out" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/seq_cl.py" beforeDir="false" afterPath="$PROJECT_DIR$/seq_cl.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/svm_prob.out" beforeDir="false" afterPath="$PROJECT_DIR$/svm_prob.out" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xgb_prob.out" beforeDir="false" afterPath="$PROJECT_DIR$/xgb_prob.out" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/seq_modern.py" beforeDir="false" afterPath="$PROJECT_DIR$/seq_modern.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tradition_baseline.py" beforeDir="false" afterPath="$PROJECT_DIR$/tradition_baseline.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />

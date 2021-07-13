@@ -24,6 +24,7 @@ class seq_cl():
         self.read_d = read_d
         self.train_data_cohort = read_d.file_names_cohort[0:500]
         self.train_data_control = read_d.file_names_control[0:3000]
+        self.train_data_control_pre = read_d.file_names_control[3000:6000]
         self.test_data_cohort = read_d.file_names_cohort[500:700]
         self.test_data_control = read_d.file_names_control[3000:4000]
         self.train_data_cohort_mem = read_d.file_names_cohort[0:500]
@@ -48,7 +49,7 @@ class seq_cl():
         self.lab_length = 19
         self.blood_length = 27
         self.epoch = 3
-        self.epoch_pre = 2
+        self.epoch_pre = 1
         self.gamma = 2
         self.tau = 1
         self.latent_dim = 100
@@ -61,6 +62,7 @@ class seq_cl():
         self.positive_sample_size_self = 1
         self.negative_sample_size = 15
         self.train_data_all = self.train_data_cohort + self.train_data_control
+        self.train_data_all_different = self.train_data_cohort + self.train_data_control_pre
         self.logit = np.zeros(self.train_length_cohort+self.train_length_control)
         self.logit[0:self.train_length_cohort] = 1
         self.test_data_all = self.test_data_cohort + self.test_data_control
@@ -223,6 +225,12 @@ class seq_cl():
         self.shuffle_train = np.array(self.train_data_all)[self.shuffle_num]
         self.shuffle_logit = self.logit[self.shuffle_num]
 
+    def shuffle_train_data_different(self):
+        self.shuffle_num = np.array(range(self.train_length_cohort + self.train_length_control))
+        np.random.shuffle(self.shuffle_num)
+        self.shuffle_train_pre = np.array(self.train_data_all)[self.shuffle_num]
+        self.shuffle_logit_pre = self.logit[self.shuffle_num]
+
 
     def LSTM_layers(self):
         self.lstm = tf.keras.layers.LSTM(self.latent_dim,return_sequences=True,return_state=True)
@@ -314,6 +322,7 @@ class seq_cl():
         self.construct_knn_attribute_cohort()
         self.construct_knn_attribute_control()
         self.shuffle_train_data()
+        self.shuffle_train_data_different()
         self.LSTM_layers()
         """
         LSTM stack layers
@@ -340,6 +349,7 @@ class seq_cl():
                                                                                           self.negative_sample_size,
                                                                                           self.time_sequence,
                                                                                           self.final_dim])
+
 
         bce = tf.keras.losses.BinaryCrossentropy()
         self.x_origin = whole_seq_output[:,self.time_sequence-1,:]
@@ -655,8 +665,8 @@ class seq_cl():
         for i in range(self.epoch_pre):
             for j in range(self.iteration):
                 print(j)
-                self.aquire_batch_data_cl(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
-                self.err_ = self.sess.run([self.log_normalized_prob_time, self.train_step_cl_time,self.logit_sig],
+                self.aquire_batch_data_cl(j*self.batch_size, self.shuffle_train_pre, self.batch_size,self.shuffle_logit_pre)
+                self.err_ = self.sess.run([self.log_normalized_prob_time, self.train_step_cl,self.logit_sig],
                                           feed_dict={self.input_x: self.one_batch_data,
                                                      self.input_y_logit: self.one_batch_logit_dp,
                                                      self.input_x_pos:self.one_batch_data_pos,
@@ -673,13 +683,13 @@ class seq_cl():
         for i in range(self.epoch):
             for j in range(self.iteration):
                 #print(j)
-                self.aquire_batch_data_cl_attribute(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
+                self.aquire_batch_data(j*self.batch_size, self.shuffle_train, self.batch_size,self.shuffle_logit)
                 self.err_ = self.sess.run([self.focal_loss, self.train_step_fl,self.logit_sig],
                                           feed_dict={self.input_x: self.one_batch_data,
-                                                     self.input_y_logit: self.one_batch_logit_dp,
-                                                     self.input_x_pos:self.one_batch_data_pos,
-                                                     self.input_x_neg:self.one_batch_data_neg,
-                                                     self.input_x_neg_self:self.one_batch_data_neg_self})
+                                                     self.input_y_logit: self.one_batch_logit_dp})
+                                                     #self.input_x_pos:self.one_batch_data_pos,
+                                                     #self.input_x_neg:self.one_batch_data_neg,
+                                                     #self.input_x_neg_self:self.one_batch_data_neg_self})
 
                 #print(self.err_[0])
                 #auc = roc_auc_score(self.one_batch_logit, self.err_[2])

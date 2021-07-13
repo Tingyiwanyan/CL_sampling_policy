@@ -41,7 +41,7 @@ class read_data_mimic():
         self.lab_length = 19
         self.blood_length = 27
 
-        self.predict_window = 4
+        self.predict_window = 2
 
         self.mean_vital = [ 91.67865086, 120.80026402,  60.98199649,  78.39028852,
         19.64776703,  36.86108155,  96.71496552, 138.30870759]

@@ -191,7 +191,7 @@ class tradition_b():
                                                                   #self.init_hiddenstate: init_hidden_state})
                                                                   #self.input_x_static: self.one_batch_data_static})
         #print(roc_auc_score(self.one_batch_logit, self.out_logit))
-
+        self.acc_mlp = []
         sample_size_cohort = np.int(np.floor(len(self.test_data_cohort) * 4 / 5))
         sample_size_control = np.int(np.floor(len(self.test_data_control) * 4 / 5))
         auc = []
@@ -208,6 +208,7 @@ class tradition_b():
             auc.append(
                 roc_auc_score(self.one_batch_logit_whole, self.out_logit))
             auprc.append(average_precision_score(self.one_batch_logit_whole, self.out_logit))
+            self.acc_mlp.append(roc_auc_score(self.one_batch_logit_whole, self.out_logit))
 
         print("auc")
         print(bs.bootstrap(np.array(auc), stat_func=bs_stats.mean))
